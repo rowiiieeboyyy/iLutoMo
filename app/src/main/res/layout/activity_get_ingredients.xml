@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFFFFF">
+
+    <RelativeLayout
+        android:id="@+id/header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@drawable/abc_ic_ab_back_material"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:layout_centerHorizontal="true"
+            android:contentDescription="Back" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Get Ingredients"
+            android:textColor="#1B3022"
+            android:textStyle="bold"
+            android:textSize="18sp"
+            android:layout_below="@id/btnBack"
+            android:layout_marginTop="8dp"/>
+
+        <ImageView
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@drawable/my_profile"
+            android:layout_alignParentEnd="true"/>
+    </RelativeLayout>
+
+    <androidx.cardview.widget.CardView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_margin="16dp"
+        app:cardBackgroundColor="#D3D3D3"
+        app:cardCornerRadius="30dp"
+        app:cardElevation="0dp"
+        app:layout_constraintTop_toBottomOf="@id/header"
+        app:layout_constraintBottom_toTopOf="@id/bottomNav">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Selected Recipe: Pork Adobo"
+                android:textColor="#1B3022"
+                android:textStyle="bold"
+                android:layout_marginBottom="10dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Serving size: 500"
+                android:gravity="center"
+                android:background="@drawable/rounded_corner_grey"
+                android:padding="25dp"
+                android:textStyle="bold"
+                android:textColor="#000000"
+                android:layout_marginBottom="15dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:text="Pork belly / kasim – 1 kg        ₱391.04\nSoy sauce – 1L                    ₱53.50\nVinegar – 1L                      ₱43.00\nGarlic – 1 clove                  ₱30.00\nBay leaves – 10g                  ₱22.70\nWhole peppercorn – 50g            ₱41.50\nWhite sugar – 1kg                 ₱79.00\nCooking oil – 1                   ₱150.00"
+                android:textColor="#000000"
+                android:textSize="13sp"
+                android:lineSpacingExtra="6dp"/>
+
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#888888" android:layout_marginVertical="10dp"/>
+
+            <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+                <TextView android:text="Subtotal:\nVAT(12%):\nTotal:" android:textStyle="bold" android:textColor="#000000" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                <TextView android:text="₱810.74\n₱97.29\n₱908.03" android:textStyle="bold" android:textColor="#000000" android:layout_alignParentEnd="true" android:gravity="end" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            </RelativeLayout>
+
+            <Button
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Get Ingredient"
+                android:textAllCaps="false"
+                android:layout_marginTop="10dp"
+                android:backgroundTint="#BDBDBD"
+                android:textColor="#000000"
+                app:cornerRadius="20dp"/>
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="65dp"
+        android:background="#FFFFFF"
+        app:menu="@menu/bottom_nav_menu"
+        app:layout_constraintBottom_toBottomOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
