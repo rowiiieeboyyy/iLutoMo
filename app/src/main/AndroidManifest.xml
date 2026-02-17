@@ -28,6 +28,7 @@
         <activity android:name=".MacrosActivity" android:exported="false" />
         <activity android:name=".CookingStepsActivity" android:exported="false" />
         <activity android:name=".GetIngredientsActivity" android:exported="false" />
-
+        <activity android:name=".DiaryActivity" />
+        <activity android:name=".EditDiaryActivity" />
     </application>
 </manifest>
