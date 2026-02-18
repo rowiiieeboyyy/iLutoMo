@@ -30,5 +30,7 @@
         <activity android:name=".GetIngredientsActivity" android:exported="false" />
         <activity android:name=".DiaryActivity" />
         <activity android:name=".EditDiaryActivity" />
+        <activity android:name=".OrderConfirmationActivity" android:exported="false" />
+
     </application>
 </manifest>

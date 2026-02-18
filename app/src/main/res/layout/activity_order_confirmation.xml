@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFFFFF">
+
+    <RelativeLayout
+        android:id="@+id/order_top_bar"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:paddingHorizontal="16dp">
+
+        <ImageView
+            android:id="@+id/order_back_arrow"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_centerVertical="true"
+            android:src="@android:drawable/ic_menu_revert"
+            app:tint="#000000" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginStart="12dp"
+            android:layout_toEndOf="@id/order_back_arrow"
+            android:text="Order Confirmation"
+            android:textColor="#000000"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="40dp"
+            android:src="@android:drawable/ic_menu_agenda" />
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:src="@android:drawable/checkbox_on_background"
+            app:tint="#32CD32" />
+    </RelativeLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/order_top_bar">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Order Summary"
+                android:textColor="#2E5A27"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal"
+                android:weightSum="2">
+
+                <androidx.cardview.widget.CardView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="4dp"
+                    android:layout_weight="1"
+                    app:cardCornerRadius="8dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Main Dish" android:background="#E0E0E0" android:textSize="10sp" android:paddingHorizontal="4dp"/>
+                        <View android:layout_width="match_parent" android:layout_height="100dp" android:layout_marginTop="4dp" android:background="#F5F5F5"/>
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Chimken adobo" android:layout_marginTop="4dp" android:textSize="12sp"/>
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="50,000" android:textStyle="bold" android:textSize="16sp"/>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <androidx.cardview.widget.CardView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="4dp"
+                    android:layout_weight="1"
+                    app:cardCornerRadius="8dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Drink" android:background="#E0E0E0" android:textSize="10sp" android:paddingHorizontal="4dp"/>
+                        <View android:layout_width="match_parent" android:layout_height="100dp" android:layout_marginTop="4dp" android:background="#F5F5F5"/>
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Mountain Dew" android:layout_marginTop="4dp" android:textSize="12sp"/>
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="50,500" android:textStyle="bold" android:textSize="16sp"/>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal"
+                android:weightSum="2">
+                <Button android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Contact Support" android:textAllCaps="false" android:textColor="#000000" android:backgroundTint="#FFFFFF" android:layout_marginEnd="4dp" style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+                <Button android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Refresh Status" android:textAllCaps="false" android:backgroundTint="#2E5A27"/>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="Pickup Instructions\nOrder Status : Preparing Ingredients"
+                android:textColor="#2E5A27"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Important details for pickup."
+                android:textColor="#9E9E9E"
+                android:textSize="12sp" />
+
+            <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp">
+                <ImageView android:id="@+id/order_loc_icon" android:layout_width="32dp" android:layout_height="32dp" android:src="@android:drawable/ic_menu_mylocation" android:padding="4dp" android:background="#F0F0F0"/>
+                <TextView android:id="@+id/order_loc_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_toEndOf="@id/order_loc_icon" android:layout_marginStart="8dp" android:text="Pickup Location" android:textStyle="bold"/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_below="@id/order_loc_label" android:layout_toEndOf="@id/order_loc_icon" android:layout_marginStart="8dp" android:text="123 Main Street" android:textColor="#9E9E9E" android:textSize="12sp"/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:gravity="end" android:text="Pick up\nbetween 5:00\nPM - 6:00 PM" android:textStyle="bold" android:textSize="12sp"/>
+            </RelativeLayout>
+
+            <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp">
+                <ImageView android:id="@+id/order_time_icon" android:layout_width="32dp" android:layout_height="32dp" android:src="@android:drawable/ic_menu_recent_history" android:padding="4dp" android:background="#F0F0F0"/>
+                <TextView android:id="@+id/order_time_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_toEndOf="@id/order_time_icon" android:layout_marginStart="8dp" android:text="Expected Ready Time" android:textStyle="bold"/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_below="@id/order_time_label" android:layout_toEndOf="@id/order_time_icon" android:layout_marginStart="8dp" android:text="Approximately in 30 minutes." android:textColor="#9E9E9E" android:textSize="12sp"/>
+            </RelativeLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:orientation="horizontal"
+                android:weightSum="2">
+                <Button android:id="@+id/order_btn_view_more" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="View More Orders" android:textAllCaps="false" android:textColor="#000000" android:backgroundTint="#FFFFFF" android:layout_marginEnd="4dp" style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+                <Button android:id="@+id/order_btn_cancel" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Cancel Order" android:textAllCaps="false" android:backgroundTint="#2E5A27"/>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="30dp"
+                android:text="What Others Are Saying"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Customer reviews about their orders." android:textColor="#9E9E9E" android:textSize="12sp" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:orientation="horizontal">
+                <androidx.cardview.widget.CardView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_margin="4dp" app:cardBackgroundColor="#F5F5F5" app:cardElevation="0dp" app:cardCornerRadius="8dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Alice ⭐⭐⭐⭐⭐" android:textStyle="bold" android:textSize="11sp"/>
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Picked the Freshest vegies" android:textSize="11sp" android:layout_marginTop="4dp"/>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_margin="4dp" app:cardBackgroundColor="#F5F5F5" app:cardElevation="0dp" app:cardCornerRadius="8dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Bob ⭐⭐⭐" android:textStyle="bold" android:textSize="11sp"/>
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="nice!" android:textSize="11sp" android:layout_marginTop="4dp"/>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+</RelativeLayout>
