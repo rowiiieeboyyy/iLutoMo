@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "847820386707",
+    "project_id": "ilutomo",
+    "storage_bucket": "ilutomo.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:847820386707:android:fc5ea73cee688ef9723866",
+        "android_client_info": {
+          "package_name": "com.example.ilutomo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAwv8XaP8Z0RL4xnDpOeEBtRaNGF2FK2vM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
