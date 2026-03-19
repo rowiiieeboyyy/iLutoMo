@@ -15,19 +15,9 @@ class ProfileActivity : AppCompatActivity() {
 
         bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
-                R.id.nav_home -> {
-                    startActivity(Intent(this, HomeActivity::class.java))
-                    true
-                }
-                R.id.nav_recipes -> {
-                    // THIS WAS MISSING
-                    startActivity(Intent(this, RecipesActivity::class.java))
-                    true
-                }
-                R.id.nav_pantry -> {
-                    startActivity(Intent(this, PantryActivity::class.java))
-                    true
-                }
+                R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); finish(); true }
+                R.id.nav_recipes -> { startActivity(Intent(this, RecipesActivity::class.java)); finish(); true }
+                R.id.nav_pantry -> { startActivity(Intent(this, PantryActivity::class.java)); finish(); true }
                 R.id.nav_profile -> true
                 else -> false
             }

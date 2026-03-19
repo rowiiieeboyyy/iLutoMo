@@ -24,6 +24,7 @@ class RecipesActivity : AppCompatActivity() {
     private lateinit var tvNeeded: TextView
     private lateinit var rvAvailable: RecyclerView
     private var currentIngredients = mutableListOf<DisplayIngredient>()
+    private var currentRecipe: Recipe? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,27 +33,13 @@ class RecipesActivity : AppCompatActivity() {
         tvNeeded = findViewById(R.id.tvNeededList)
         rvAvailable = findViewById(R.id.rvAvailableIngredients)
         val btnChoose = findViewById<Button>(R.id.btnChooseRecipe)
+        val btnMacros = findViewById<Button>(R.id.btnViewMacros)
+        val btnSteps = findViewById<Button>(R.id.btnViewSteps)
         val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNav)
 
         rvAvailable.layoutManager = LinearLayoutManager(this)
 
-        btnChoose.setOnClickListener {
-            FirebaseDatabase.getInstance().getReference("UserSelection").get().addOnSuccessListener { snapshot ->
-                val selections = snapshot.children.map { it.key ?: "" }
-                if (selections.isEmpty()) {
-                    Toast.makeText(this, "Add recipes from Home first!", Toast.LENGTH_SHORT).show()
-                } else {
-                    AlertDialog.Builder(this)
-                        .setTitle("Select Recipe")
-                        .setItems(selections.toTypedArray()) { _, which ->
-                            val selectedName = selections[which]
-                            btnChoose.text = selectedName
-                            loadRecipeData(selectedName)
-                        }.show()
-                }
-            }
-        }
-
+        // Setup Navigation
         bottomNav.selectedItemId = R.id.nav_recipes
         bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
@@ -63,51 +50,81 @@ class RecipesActivity : AppCompatActivity() {
                 else -> false
             }
         }
+
+        btnChoose.setOnClickListener {
+            FirebaseDatabase.getInstance().getReference("UserSelection").get().addOnSuccessListener { snapshot ->
+                val selections = snapshot.children.map { it.key ?: "" }
+                if (selections.isEmpty()) {
+                    Toast.makeText(this, "Add recipes from Home first!", Toast.LENGTH_SHORT).show()
+                } else {
+                    AlertDialog.Builder(this).setTitle("Select Recipe").setItems(selections.toTypedArray()) { _, which ->
+                        val selectedName = selections[which]
+                        btnChoose.text = selectedName
+                        loadRecipeData(selectedName)
+                    }.show()
+                }
+            }
+        }
+
+        btnMacros.setOnClickListener {
+            currentRecipe?.let { showMacrosDialog(it) } ?: Toast.makeText(this, "Select a recipe!", Toast.LENGTH_SHORT).show()
+        }
+
+        btnSteps.setOnClickListener {
+            currentRecipe?.let { showStepsDialog(it) } ?: Toast.makeText(this, "Select a recipe!", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun loadRecipeData(name: String) {
-        FirebaseDatabase.getInstance().getReference("admin_recipes").orderByChild("title").equalTo(name)
-            .get().addOnSuccessListener { snapshot ->
-                val recipeNode = snapshot.children.firstOrNull()
-                val recipe = recipeNode?.getValue(Recipe::class.java)
-
-                currentIngredients.clear()
-                recipe?.ingredients?.forEach { (ing, amt) ->
-                    // .trim() handles database entries with accidental spaces
-                    currentIngredients.add(DisplayIngredient(ing.trim(), amt))
+        FirebaseDatabase.getInstance().reference.get().addOnSuccessListener { snapshot ->
+            for (data in snapshot.children) {
+                if (data.key == "UserSelection") continue
+                val tempRecipe = data.getValue(Recipe::class.java)
+                val recipeTitle = tempRecipe?.title ?: data.child("imageResourceName").value.toString().replace("_", " ")
+                if (recipeTitle.equals(name, ignoreCase = true)) {
+                    currentRecipe = tempRecipe
+                    currentRecipe?.title = recipeTitle
+                    currentIngredients.clear()
+                    tempRecipe?.ingredients?.forEach { (ingName, amount) ->
+                        currentIngredients.add(DisplayIngredient(ingName, amount.toString()))
+                    }
+                    updateUI()
+                    break
                 }
-                updateUI()
             }
+        }
     }
 
     private fun updateUI() {
-        rvAvailable.adapter = IngredientCheckAdapter(currentIngredients) {
-            renderNeededList()
-        }
+        rvAvailable.adapter = IngredientCheckAdapter(currentIngredients) { renderNeededList() }
         renderNeededList()
     }
 
     private fun renderNeededList() {
-        if (currentIngredients.isEmpty()) return
-
+        if (currentIngredients.isEmpty()) { tvNeeded.text = ""; return }
         val fullText = StringBuilder()
-        currentIngredients.forEach { fullText.append("${it.name}\n\n") }
-
+        currentIngredients.forEach { fullText.append("${it.name} (${it.amount})\n\n") }
         val spannableString = SpannableString(fullText.toString())
         var pointer = 0
-
         currentIngredients.forEach { ingredient ->
-            val entryText = "${ingredient.name}\n\n"
+            val entryText = "${ingredient.name} (${ingredient.amount})\n\n"
             if (ingredient.isChecked) {
-                // Apply Strikethrough
                 spannableString.setSpan(StrikethroughSpan(), pointer, pointer + ingredient.name.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                // Apply Grey Color
                 spannableString.setSpan(ForegroundColorSpan(Color.GRAY), pointer, pointer + ingredient.name.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                // Apply Italics
                 spannableString.setSpan(StyleSpan(Typeface.ITALIC), pointer, pointer + ingredient.name.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
             pointer += entryText.length
         }
         tvNeeded.text = spannableString
+    }
+
+    private fun showMacrosDialog(recipe: Recipe) {
+        val macrosText = recipe.macros.entries.joinToString("\n") { "${it.key}: ${it.value}" }
+        AlertDialog.Builder(this).setTitle("Macros").setMessage(macrosText).setPositiveButton("Close", null).show()
+    }
+
+    private fun showStepsDialog(recipe: Recipe) {
+        val stepsText = recipe.steps.mapIndexed { i, s -> "${i + 1}. $s" }.joinToString("\n\n")
+        AlertDialog.Builder(this).setTitle("Steps").setMessage(stepsText).setPositiveButton("Done", null).show()
     }
 }

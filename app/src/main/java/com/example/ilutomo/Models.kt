@@ -1,14 +1,20 @@
 package com.example.ilutomo
 
+import com.google.firebase.database.IgnoreExtraProperties
+
+@IgnoreExtraProperties
 data class Recipe(
-    val title: String = "",
-    val category: String = "",
-    val imageResourceName: String = "",
-    val ingredients: Map<String, Double> = emptyMap()
+    var title: String = "",
+    var category: String = "",
+    var imageResourceName: String = "",
+    var ingredients: Map<String, Any> = emptyMap(),
+    var allergens: List<String> = emptyList(),
+    var macros: Map<String, String> = emptyMap(),
+    var steps: List<String> = emptyList()
 )
 
 data class DisplayIngredient(
     val name: String,
-    val amount: Double,
+    val amount: String,
     var isChecked: Boolean = false
 )

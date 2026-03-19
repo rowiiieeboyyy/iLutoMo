@@ -2,45 +2,52 @@ package com.example.ilutomo
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.firebase.database.*
 
 class HomeActivity : AppCompatActivity() {
 
+    private lateinit var rvHome: RecyclerView
     private lateinit var database: DatabaseReference
-    private lateinit var recipeList: MutableList<Recipe>
-    private lateinit var adapter: RecipeAdapter
+    private var recipeList = mutableListOf<Recipe>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_home)
 
-        val rvHome = findViewById<RecyclerView>(R.id.rvHomeRecipes)
-        val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNav)
+        rvHome = findViewById(R.id.rvHomeRecipes)
+        rvHome.layoutManager = GridLayoutManager(this, 2)
 
-        rvHome.layoutManager = LinearLayoutManager(this)
-        recipeList = mutableListOf()
+        // Points to the root of your Firebase as seen in your screenshot
+        database = FirebaseDatabase.getInstance().reference
 
-        adapter = RecipeAdapter(recipeList,
-            onAddClick = { recipe -> saveToUserSelection(recipe) },
-            onItemClick = { /* View Details */ }
-        )
-        rvHome.adapter = adapter
-
-        database = FirebaseDatabase.getInstance().getReference("admin_recipes")
         fetchRecipes()
 
+        val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNav)
         bottomNav.selectedItemId = R.id.nav_home
         bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_home -> true
-                R.id.nav_recipes -> { startActivity(Intent(this, RecipesActivity::class.java)); true }
-                R.id.nav_pantry -> { startActivity(Intent(this, PantryActivity::class.java)); true }
-                R.id.nav_profile -> { startActivity(Intent(this, ProfileActivity::class.java)); true }
+                R.id.nav_recipes -> {
+                    startActivity(Intent(this, RecipesActivity::class.java))
+                    finish()
+                    true
+                }
+                R.id.nav_pantry -> {
+                    startActivity(Intent(this, PantryActivity::class.java))
+                    finish()
+                    true
+                }
+                R.id.nav_profile -> {
+                    startActivity(Intent(this, ProfileActivity::class.java))
+                    finish()
+                    true
+                }
                 else -> false
             }
         }
@@ -51,20 +58,28 @@ class HomeActivity : AppCompatActivity() {
             override fun onDataChange(snapshot: DataSnapshot) {
                 recipeList.clear()
                 for (data in snapshot.children) {
+                    if (data.key == "UserSelection") continue
                     val recipe = data.getValue(Recipe::class.java)
-                    recipe?.let { recipeList.add(it) }
+                    recipe?.let {
+                        if (it.title.isEmpty()) it.title = data.child("imageResourceName").value.toString().replace("_", " ").capitalize()
+                        recipeList.add(it)
+                    }
                 }
-                adapter.notifyDataSetChanged()
+                rvHome.adapter = RecipeAdapter(recipeList) { selectedRecipe ->
+                    saveToUserSelection(selectedRecipe)
+                }
             }
             override fun onCancelled(error: DatabaseError) {
-                Toast.makeText(this@HomeActivity, error.message, Toast.LENGTH_SHORT).show()
+                Log.e("DATABASE", error.message)
             }
         })
     }
 
     private fun saveToUserSelection(recipe: Recipe) {
-        val selectionRef = FirebaseDatabase.getInstance().getReference("UserSelection")
-        selectionRef.child(recipe.title).setValue(recipe)
-            .addOnSuccessListener { Toast.makeText(this, "Saved to Recipes!", Toast.LENGTH_SHORT).show() }
+        FirebaseDatabase.getInstance().getReference("UserSelection")
+            .child(recipe.title).setValue(true)
+            .addOnSuccessListener {
+                Toast.makeText(this, "${recipe.title} added!", Toast.LENGTH_SHORT).show()
+            }
     }
 }
