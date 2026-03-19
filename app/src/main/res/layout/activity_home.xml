@@ -9,7 +9,7 @@
         android:id="@+id/tvHomeTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Home"
+        android:text="Explore Dishes"
         android:textSize="22sp"
         android:textStyle="bold"
         android:layout_marginTop="16dp"
@@ -18,7 +18,7 @@
         app:layout_constraintStart_toStartOf="parent" />
 
     <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvRecipes"
+        android:id="@+id/rvHomeRecipes"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_marginTop="16dp"
@@ -30,6 +30,7 @@
         android:id="@+id/bottomNav"
         android:layout_width="match_parent"
         android:layout_height="65dp"
+        android:background="#FFFFFF"
         app:menu="@menu/bottom_nav_menu"
         app:layout_constraintBottom_toBottomOf="parent" />
 

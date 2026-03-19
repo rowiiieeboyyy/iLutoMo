@@ -3,19 +3,22 @@ package com.example.ilutomo
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 
 class RecipeAdapter(
-    private val recipes: List<Recipe>,
-    private val onClick: (Recipe) -> Unit
+    private val recipeList: List<Recipe>,
+    private val onAddClick: (Recipe) -> Unit,
+    private val onItemClick: (Recipe) -> Unit
 ) : RecyclerView.Adapter<RecipeAdapter.RecipeViewHolder>() {
 
     class RecipeViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val title: TextView = view.findViewById(R.id.tvRecipeTitle)
-        val category: TextView = view.findViewById(R.id.tvRecipeCategory)
         val image: ImageView = view.findViewById(R.id.ivRecipeImage)
+        val category: TextView = view.findViewById(R.id.tvRecipeDescription)
+        val btnAdd: Button = view.findViewById(R.id.btnAddRecipe)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecipeViewHolder {
@@ -24,27 +27,23 @@ class RecipeAdapter(
     }
 
     override fun onBindViewHolder(holder: RecipeViewHolder, position: Int) {
-        val recipe = recipes[position]
+        val recipe = recipeList[position]
         holder.title.text = recipe.title
         holder.category.text = recipe.category
 
-        // LOGIC TO LOAD LOCAL IMAGE MANUALLY
         val context = holder.itemView.context
-        val imageResId = context.resources.getIdentifier(
-            recipe.imageResourceName,
-            "drawable",
-            context.packageName
-        )
+        val imageResId = context.resources.getIdentifier(recipe.imageResourceName, "drawable", context.packageName)
 
         if (imageResId != 0) {
             holder.image.setImageResource(imageResId)
         } else {
-            // Fallback to your placeholder if the name doesn't match
-            holder.image.setImageResource(R.drawable.placeholder_food)
+            // Default image if drawable name doesn't match
+            holder.image.setImageResource(android.R.drawable.ic_menu_report_image)
         }
 
-        holder.itemView.setOnClickListener { onClick(recipe) }
+        holder.btnAdd.setOnClickListener { onAddClick(recipe) }
+        holder.itemView.setOnClickListener { onItemClick(recipe) }
     }
 
-    override fun getItemCount() = recipes.size
+    override fun getItemCount() = recipeList.size
 }

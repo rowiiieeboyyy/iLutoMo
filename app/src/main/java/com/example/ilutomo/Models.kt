@@ -3,13 +3,12 @@ package com.example.ilutomo
 data class Recipe(
     val title: String = "",
     val category: String = "",
-    val imageResourceName: String = "", // Matches the filename in res/drawable
-    val allergens: List<String> = emptyList(),
+    val imageResourceName: String = "",
     val ingredients: Map<String, Double> = emptyMap()
 )
 
-data class Ingredient(
+data class DisplayIngredient(
     val name: String,
-    val price: Double,
-    val isOwned: Boolean = false
+    val amount: Double,
+    var isChecked: Boolean = false
 )

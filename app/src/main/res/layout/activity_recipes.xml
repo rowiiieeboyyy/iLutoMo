@@ -3,133 +3,85 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FFFFFF">
+    android:background="#F8F9FA">
 
     <TextView
-        android:id="@+id/tvRecipesTitle"
+        android:id="@+id/tvRecipeHeader"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_margin="20dp"
         android:text="Recipes"
-        android:textSize="22sp"
+        android:textSize="24sp"
         android:textStyle="bold"
-        android:textColor="#1B3022"
-        android:layout_marginTop="20dp"
-        android:layout_marginStart="20dp"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <ImageView
-        android:id="@+id/ivProfileRecipes"
-        android:layout_width="45dp"
-        android:layout_height="45dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginEnd="16dp"
-        android:scaleType="centerCrop"
-        android:src="@drawable/my_profile"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <View
-        android:id="@+id/headerDivider"
-        android:layout_width="match_parent"
-        android:layout_height="2dp"
-        android:background="#888888"
-        android:layout_marginTop="12dp"
-        app:layout_constraintTop_toBottomOf="@id/tvRecipesTitle" />
+        app:layout_constraintStart_toStartOf="parent"/>
 
     <androidx.cardview.widget.CardView
-        android:id="@+id/cvSelectedRecipe"
+        android:id="@+id/cvSelection"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
-        app:cardBackgroundColor="#D3D3D3"
-        app:cardCornerRadius="25dp"
-        app:cardElevation="0dp"
-        app:layout_constraintTop_toBottomOf="@id/headerDivider">
-        <LinearLayout
+        app:cardCornerRadius="15dp"
+        app:layout_constraintTop_toBottomOf="@id/tvRecipeHeader">
+
+        <Button
+            android:id="@+id/btnChooseRecipe"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Selected Recipe:" android:textStyle="bold" android:textColor="#1B3022"/>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Pork Adobo:" android:layout_marginStart="20dp" android:textStyle="bold" android:textColor="#1B3022"/>
-        </LinearLayout>
+            android:background="@android:color/transparent"
+            android:text="Select from your added recipes"
+            android:textColor="#1B3022"
+            android:textStyle="bold" />
     </androidx.cardview.widget.CardView>
 
     <LinearLayout
-        android:id="@+id/llLists"
         android:layout_width="match_parent"
         android:layout_height="0dp"
+        android:layout_marginTop="10dp"
         android:orientation="horizontal"
-        android:layout_margin="16dp"
-        app:layout_constraintTop_toBottomOf="@id/cvSelectedRecipe"
-        app:layout_constraintBottom_toTopOf="@id/llButtons">
+        android:padding="10dp"
+        app:layout_constraintBottom_toTopOf="@id/bottomNav"
+        app:layout_constraintTop_toBottomOf="@id/cvSelection">
 
-        <androidx.cardview.widget.CardView
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:layout_marginEnd="8dp"
-            app:cardBackgroundColor="#D3D3D3"
-            app:cardCornerRadius="25dp"
-            app:cardElevation="0dp">
-            <LinearLayout android:orientation="vertical" android:padding="16dp" android:layout_width="match_parent" android:layout_height="wrap_content">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Ingredients Needed:" android:textStyle="bold" android:textColor="#1B3022"/>
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Pork Belly\nVinegar\nGarlic\nSoy Sauce\nPeppercorn" android:layout_marginTop="10dp" android:lineSpacingExtra="4dp"/>
-            </LinearLayout>
-        </androidx.cardview.widget.CardView>
+            android:orientation="vertical"
+            android:background="#E0E0E0"
+            android:layout_margin="5dp"
+            android:padding="10dp">
+            <TextView android:text="List Needed:" android:textStyle="bold" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="8dp"/>
+            <TextView
+                android:id="@+id/tvNeededList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="No recipe selected"
+                android:textSize="16sp"
+                android:lineSpacingExtra="14dp"/>
+        </LinearLayout>
 
-        <androidx.cardview.widget.CardView
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            app:cardBackgroundColor="#D3D3D3"
-            app:cardCornerRadius="25dp"
-            app:cardElevation="0dp">
-            <LinearLayout android:orientation="vertical" android:padding="16dp" android:layout_width="match_parent" android:layout_height="wrap_content">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Available Ingredients:" android:textStyle="bold" android:textColor="#1B3022"/>
-                <CheckBox android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Pork Belly" android:layout_marginTop="10dp" android:buttonTint="#1B3022"/>
-                <CheckBox android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Vinegar" android:buttonTint="#1B3022"/>
-                <CheckBox android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Garlic" android:buttonTint="#1B3022"/>
-                <CheckBox android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Soy Sauce" android:buttonTint="#1B3022"/>
-            </LinearLayout>
-        </androidx.cardview.widget.CardView>
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/llButtons"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="16dp"
-        app:layout_constraintBottom_toTopOf="@id/bottomNav">
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/btnMacros"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="View Macronutrients"
-            android:textAllCaps="false"
-            android:layout_marginEnd="8dp"
-            android:background="#D3D3D3"/>
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/btnSteps"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="View Cooking Steps"
-            android:textAllCaps="false"
-            android:layout_marginStart="8dp"
-            android:background="#D3D3D3"/>
+            android:orientation="vertical"
+            android:background="#E0E0E0"
+            android:layout_margin="5dp"
+            android:padding="10dp">
+            <TextView android:text="Available In Pantry:" android:textStyle="bold" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="8dp"/>
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvAvailableIngredients"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </LinearLayout>
     </LinearLayout>
 
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottomNav"
         android:layout_width="match_parent"
         android:layout_height="65dp"
-        android:background="#FFFFFF"
-        app:menu="@menu/bottom_nav_menu"
-        app:layout_constraintBottom_toBottomOf="parent" />
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:menu="@menu/bottom_nav_menu" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
