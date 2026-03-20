@@ -9,30 +9,29 @@ import androidx.recyclerview.widget.RecyclerView
 
 class IngredientCheckAdapter(
     private val ingredients: List<DisplayIngredient>,
-    private val onIngredientToggled: () -> Unit
+    private val onCheckChanged: () -> Unit
 ) : RecyclerView.Adapter<IngredientCheckAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val cbIngredient: CheckBox = view.findViewById(R.id.cbIngredient)
-        val tvIngredientName: TextView = view.findViewById(R.id.tvIngredientName)
+        val checkBox: CheckBox = view.findViewById(R.id.cbIngredient)
+        val tvName: TextView = view.findViewById(R.id.tvIngredientName)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_ingredient_check, parent, false)
+        // Ensure you have a layout file named item_ingredient_check.xml
+        val view = LayoutInflater.from(parent.context)
+            .inflate(R.layout.item_ingredient_check, parent, false)
         return ViewHolder(view)
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val ingredient = ingredients[position]
-        holder.tvIngredientName.text = "${ingredient.name} (${ingredient.amount})"
+        val item = ingredients[position]
+        holder.tvName.text = "${item.name} (${item.amount})"
+        holder.checkBox.isChecked = item.isChecked
 
-        // Remove listener before setting state to prevent accidental triggers
-        holder.cbIngredient.setOnCheckedChangeListener(null)
-        holder.cbIngredient.isChecked = ingredient.isChecked
-
-        holder.cbIngredient.setOnCheckedChangeListener { _, isChecked ->
-            ingredient.isChecked = isChecked
-            onIngredientToggled() // This triggers renderNeededList in RecipesActivity
+        holder.checkBox.setOnCheckedChangeListener { _, isChecked ->
+            item.isChecked = isChecked
+            onCheckChanged()
         }
     }
 

@@ -17,7 +17,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomnavigation.BottomNavigationView
-import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.*
 
 class RecipesActivity : AppCompatActivity() {
 
@@ -25,6 +25,7 @@ class RecipesActivity : AppCompatActivity() {
     private lateinit var rvAvailable: RecyclerView
     private var currentIngredients = mutableListOf<DisplayIngredient>()
     private var currentRecipe: Recipe? = null
+    private val ingredientLibrary = mutableMapOf<String, Map<String, Double>>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,7 +40,8 @@ class RecipesActivity : AppCompatActivity() {
 
         rvAvailable.layoutManager = LinearLayoutManager(this)
 
-        // Setup Navigation
+        loadIngredientLibrary()
+
         bottomNav.selectedItemId = R.id.nav_recipes
         bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
@@ -52,35 +54,99 @@ class RecipesActivity : AppCompatActivity() {
         }
 
         btnChoose.setOnClickListener {
-            FirebaseDatabase.getInstance().getReference("UserSelection").get().addOnSuccessListener { snapshot ->
-                val selections = snapshot.children.map { it.key ?: "" }
-                if (selections.isEmpty()) {
-                    Toast.makeText(this, "Add recipes from Home first!", Toast.LENGTH_SHORT).show()
-                } else {
-                    AlertDialog.Builder(this).setTitle("Select Recipe").setItems(selections.toTypedArray()) { _, which ->
-                        val selectedName = selections[which]
-                        btnChoose.text = selectedName
-                        loadRecipeData(selectedName)
-                    }.show()
-                }
-            }
+            showRecipeSelectionDialog(btnChoose)
         }
 
         btnMacros.setOnClickListener {
-            currentRecipe?.let { showMacrosDialog(it) } ?: Toast.makeText(this, "Select a recipe!", Toast.LENGTH_SHORT).show()
+            if (currentRecipe == null) {
+                Toast.makeText(this, "Select a recipe first!", Toast.LENGTH_SHORT).show()
+            } else {
+                showAccurateMacrosDialog(currentRecipe!!)
+            }
         }
 
         btnSteps.setOnClickListener {
-            currentRecipe?.let { showStepsDialog(it) } ?: Toast.makeText(this, "Select a recipe!", Toast.LENGTH_SHORT).show()
+            currentRecipe?.let { showStepsDialog(it) } ?: Toast.makeText(this, "Select a recipe first!", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun showRecipeSelectionDialog(btnChoose: Button) {
+        val ref = FirebaseDatabase.getInstance().getReference("UserSelection")
+        ref.get().addOnSuccessListener { snapshot ->
+            val selections = snapshot.children.map { it.key ?: "" }
+
+            if (selections.isEmpty()) {
+                Toast.makeText(this, "No recipes added yet!", Toast.LENGTH_SHORT).show()
+                return@addOnSuccessListener
+            }
+
+            // Create a dialog with two options: Select or Delete
+            AlertDialog.Builder(this)
+                .setTitle("Manage Recipes")
+                .setItems(selections.toTypedArray()) { _, which ->
+                    val selectedName = selections[which]
+
+                    // Ask the user what they want to do with the selected recipe
+                    AlertDialog.Builder(this)
+                        .setTitle(selectedName)
+                        .setMessage("What would you like to do?")
+                        .setPositiveButton("Select") { _, _ ->
+                            btnChoose.text = selectedName
+                            loadRecipeData(selectedName)
+                        }
+                        .setNegativeButton("Delete from List") { _, _ ->
+                            deleteRecipeFromUserSelection(selectedName, btnChoose)
+                        }
+                        .setNeutralButton("Cancel", null)
+                        .show()
+                }
+                .show()
+        }
+    }
+
+    private fun deleteRecipeFromUserSelection(recipeName: String, btnChoose: Button) {
+        FirebaseDatabase.getInstance().getReference("UserSelection")
+            .child(recipeName)
+            .removeValue()
+            .addOnSuccessListener {
+                Toast.makeText(this, "$recipeName removed.", Toast.LENGTH_SHORT).show()
+
+                // If the deleted recipe was the one currently viewed, clear the UI
+                if (btnChoose.text == recipeName) {
+                    btnChoose.text = "Choose Recipe"
+                    currentRecipe = null
+                    currentIngredients.clear()
+                    updateUI()
+                }
+            }
+    }
+
+    private fun loadIngredientLibrary() {
+        FirebaseDatabase.getInstance().getReference("ingredient_library")
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    ingredientLibrary.clear()
+                    for (data in snapshot.children) {
+                        val stats = mutableMapOf<String, Double>()
+                        data.children.forEach { child ->
+                            val value = child.value?.toString()?.toDoubleOrNull() ?: 0.0
+                            stats[child.key!!] = value
+                        }
+                        ingredientLibrary[data.key!!] = stats
+                    }
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            })
     }
 
     private fun loadRecipeData(name: String) {
         FirebaseDatabase.getInstance().reference.get().addOnSuccessListener { snapshot ->
             for (data in snapshot.children) {
-                if (data.key == "UserSelection") continue
+                if (data.key == "UserSelection" || data.key == "ingredient_library") continue
+
                 val tempRecipe = data.getValue(Recipe::class.java)
                 val recipeTitle = tempRecipe?.title ?: data.child("imageResourceName").value.toString().replace("_", " ")
+
                 if (recipeTitle.equals(name, ignoreCase = true)) {
                     currentRecipe = tempRecipe
                     currentRecipe?.title = recipeTitle
@@ -93,6 +159,48 @@ class RecipesActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun showAccurateMacrosDialog(recipe: Recipe) {
+        val builder = StringBuilder()
+        var totalCals = 0.0
+        var totalPro = 0.0
+        var totalCarbs = 0.0
+        var totalFat = 0.0
+
+        builder.append("DETAILED BREAKDOWN:\n")
+        builder.append("----------------------------\n")
+
+        recipe.ingredients.forEach { (name, amount) ->
+            val qty = amount.toString().toDoubleOrNull() ?: 0.0
+            val libraryData = ingredientLibrary[name]
+
+            if (libraryData != null) {
+                val cal = qty * (libraryData["cal"] ?: 0.0)
+                val pro = qty * (libraryData["pro"] ?: 0.0)
+                val carb = qty * (libraryData["carb"] ?: 0.0)
+                val fat = qty * (libraryData["fat"] ?: 0.0)
+
+                totalCals += cal
+                totalPro += pro
+                totalCarbs += carb
+                totalFat += fat
+
+                builder.append("• $name ($qty):\n")
+                builder.append("  ${cal.toInt()} kcal | P: ${"%.1f".format(pro)}g | C: ${"%.1f".format(carb)}g\n\n")
+            } else {
+                builder.append("• $name: (Data missing)\n\n")
+            }
+        }
+
+        builder.append("----------------------------\n")
+        builder.append("TOTALS:\n")
+        builder.append("Calories: ${totalCals.toInt()} kcal\n")
+        builder.append("Protein: ${"%.1f".format(totalPro)}g\n")
+        builder.append("Carbs: ${"%.1f".format(totalCarbs)}g\n")
+        builder.append("Fats: ${"%.1f".format(totalFat)}g\n")
+
+        AlertDialog.Builder(this).setTitle(recipe.title).setMessage(builder.toString()).setPositiveButton("Close", null).show()
     }
 
     private fun updateUI() {
@@ -116,11 +224,6 @@ class RecipesActivity : AppCompatActivity() {
             pointer += entryText.length
         }
         tvNeeded.text = spannableString
-    }
-
-    private fun showMacrosDialog(recipe: Recipe) {
-        val macrosText = recipe.macros.entries.joinToString("\n") { "${it.key}: ${it.value}" }
-        AlertDialog.Builder(this).setTitle("Macros").setMessage(macrosText).setPositiveButton("Close", null).show()
     }
 
     private fun showStepsDialog(recipe: Recipe) {

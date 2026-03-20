@@ -10,35 +10,43 @@ import androidx.recyclerview.widget.RecyclerView
 class RecipeAdapter(
     private val recipes: List<Recipe>,
     private val onAddClick: (Recipe) -> Unit
-) : RecyclerView.Adapter<RecipeAdapter.ViewHolder>() {
+) : RecyclerView.Adapter<RecipeAdapter.RecipeViewHolder>() {
 
-    class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val imgRecipe: ImageView = view.findViewById(R.id.idRecipeImg)
-        val tvTitle: TextView = view.findViewById(R.id.tvRecipeTitle)
-        val tvCategory: TextView = view.findViewById(R.id.tvRecipeCategory)
+    class RecipeViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val img: ImageView = view.findViewById(R.id.idRecipeImg)
+        val title: TextView = view.findViewById(R.id.tvRecipeTitle)
+        val category: TextView = view.findViewById(R.id.tvRecipeCategory)
         val btnAdd: ImageView = view.findViewById(R.id.btnAddRecipe)
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecipeViewHolder {
+        // Ensure this layout filename is correct (e.g., item_recipe_card.xml)
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_recipe_card, parent, false)
-        return ViewHolder(view)
+        return RecipeViewHolder(view)
     }
 
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+    override fun onBindViewHolder(holder: RecipeViewHolder, position: Int) {
         val recipe = recipes[position]
-        holder.tvTitle.text = recipe.title
-        holder.tvCategory.text = recipe.category
 
+        holder.title.text = if (recipe.title.isNotEmpty()) recipe.title else "Untitled Dish"
+        holder.category.text = recipe.category
+
+        // Dynamic image loading from drawable
         val context = holder.itemView.context
-        val imageId = context.resources.getIdentifier(recipe.imageResourceName, "drawable", context.packageName)
+        val imageResId = context.resources.getIdentifier(
+            recipe.imageResourceName, "drawable", context.packageName
+        )
 
-        if (imageId != 0) {
-            holder.imgRecipe.setImageResource(imageId)
+        if (imageResId != 0) {
+            holder.img.setImageResource(imageResId)
         } else {
-            holder.imgRecipe.setImageResource(android.R.drawable.ic_menu_gallery)
+            holder.img.setImageResource(android.R.drawable.ic_menu_gallery)
         }
 
-        holder.btnAdd.setOnClickListener { onAddClick(recipe) }
+        // Listener for the green '+' button in your XML
+        holder.btnAdd.setOnClickListener {
+            onAddClick(recipe)
+        }
     }
 
     override fun getItemCount() = recipes.size
