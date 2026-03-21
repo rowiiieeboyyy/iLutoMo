@@ -7,10 +7,11 @@ data class Recipe(
     var title: String = "",
     var category: String = "",
     var imageResourceName: String = "",
-    var ingredients: Map<String, Any> = emptyMap(),
-    var allergens: List<String> = emptyList(),
-    var macros: Map<String, String> = emptyMap(),
-    var steps: List<String> = emptyList()
+    // Nullable types (?) prevent crashes if data is missing or wrong in Firebase
+    var ingredients: Map<String, Any>? = emptyMap(),
+    var allergens: List<String>? = emptyList(),
+    var macros: Map<String, String>? = emptyMap(),
+    var steps: List<String>? = emptyList()
 )
 
 data class DisplayIngredient(

@@ -20,7 +20,6 @@ class RecipeAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecipeViewHolder {
-        // Ensure this layout filename is correct (e.g., item_recipe_card.xml)
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_recipe_card, parent, false)
         return RecipeViewHolder(view)
     }
@@ -28,22 +27,17 @@ class RecipeAdapter(
     override fun onBindViewHolder(holder: RecipeViewHolder, position: Int) {
         val recipe = recipes[position]
 
-        holder.title.text = if (recipe.title.isNotEmpty()) recipe.title else "Untitled Dish"
+        holder.title.text = recipe.title.ifEmpty { "Untitled Dish" }
         holder.category.text = recipe.category
 
-        // Dynamic image loading from drawable
         val context = holder.itemView.context
         val imageResId = context.resources.getIdentifier(
             recipe.imageResourceName, "drawable", context.packageName
         )
 
-        if (imageResId != 0) {
-            holder.img.setImageResource(imageResId)
-        } else {
-            holder.img.setImageResource(android.R.drawable.ic_menu_gallery)
-        }
+        holder.img.setImageResource(if (imageResId != 0) imageResId else android.R.drawable.ic_menu_gallery)
 
-        // Listener for the green '+' button in your XML
+        // The '+' button logic
         holder.btnAdd.setOnClickListener {
             onAddClick(recipe)
         }
