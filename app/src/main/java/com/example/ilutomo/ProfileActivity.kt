@@ -31,7 +31,6 @@ class ProfileActivity : AppCompatActivity() {
     }
 
     private fun setupRangeListeners() {
-        // Budget Range
         binding.rangeBudget.addOnChangeListener { slider, _, _ ->
             val min = slider.values[0].toInt()
             val max = slider.values[1].toInt()
@@ -39,7 +38,6 @@ class ProfileActivity : AppCompatActivity() {
             binding.tvSummaryBudget.text = "₱$max"
         }
 
-        // Protein Range
         binding.rangeProtein.addOnChangeListener { slider, _, _ ->
             val min = slider.values[0].toInt()
             val max = slider.values[1].toInt()
@@ -47,7 +45,6 @@ class ProfileActivity : AppCompatActivity() {
             binding.tvSummaryProtein.text = "${max}g"
         }
 
-        // Carbs Range
         binding.rangeCarbs.addOnChangeListener { slider, _, _ ->
             val min = slider.values[0].toInt()
             val max = slider.values[1].toInt()
@@ -55,7 +52,6 @@ class ProfileActivity : AppCompatActivity() {
             binding.tvSummaryCarbs.text = "${max}g"
         }
 
-        // NEW: Sugar Range
         binding.rangeSugar.addOnChangeListener { slider, _, _ ->
             val min = slider.values[0].toInt()
             val max = slider.values[1].toInt()
@@ -63,7 +59,6 @@ class ProfileActivity : AppCompatActivity() {
             binding.tvSummarySugar.text = "${max}g"
         }
 
-        // NEW: Sodium Range
         binding.rangeSodium.addOnChangeListener { slider, _, _ ->
             val min = slider.values[0].toInt()
             val max = slider.values[1].toInt()
@@ -85,40 +80,54 @@ class ProfileActivity : AppCompatActivity() {
         if (binding.cbShellfish.isChecked) allergens.add("Shellfish")
         if (binding.cbDairy.isChecked) allergens.add("Dairy")
 
+        // We now save the 'isChecked' state so HomeActivity knows if it should filter
         val prefs = mapOf(
             "dietary_type" to diet,
             "allergens" to allergens,
+            "use_budget" to binding.checkBudget.isChecked,
             "budget_limit" to binding.rangeBudget.values[1].toInt(),
+            "use_protein" to binding.checkProtein.isChecked,
             "protein_goal" to binding.rangeProtein.values[1].toInt(),
+            "use_carbs" to binding.checkCarbs.isChecked,
             "carbs_limit" to binding.rangeCarbs.values[1].toInt(),
+            "use_sugar" to binding.checkSugar.isChecked,
             "sugar_limit" to binding.rangeSugar.values[1].toInt(),
+            "use_sodium" to binding.checkSodium.isChecked,
             "sodium_limit" to binding.rangeSodium.values[1].toInt()
         )
 
         database.child("UserPreferences").setValue(prefs).addOnSuccessListener {
-            // Update the Summary labels in real-time
-            binding.tvSummaryDiet.text = diet
-            binding.tvSummaryAllergens.text = if (allergens.isEmpty()) "None" else allergens.joinToString(", ")
-            binding.tvSummaryBudget.text = "₱${prefs["budget_limit"]}"
-            binding.tvSummaryProtein.text = "${prefs["protein_goal"]}g"
-            binding.tvSummaryCarbs.text = "${prefs["carbs_limit"]}g"
-            binding.tvSummarySugar.text = "${prefs["sugar_limit"]}g"
-            binding.tvSummarySodium.text = "${prefs["sodium_limit"]}mg"
-
+            updateSummaryUI(diet, allergens, prefs)
             Toast.makeText(this, "Preferences Saved!", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun updateSummaryUI(diet: String, allergens: List<String>, prefs: Map<String, Any>) {
+        binding.tvSummaryDiet.text = diet
+        binding.tvSummaryAllergens.text = if (allergens.isEmpty()) "None" else allergens.joinToString(", ")
+
+        // Only show values in summary if the filter is enabled
+        binding.tvSummaryBudget.text = if (binding.checkBudget.isChecked) "₱${prefs["budget_limit"]}" else "Off"
+        binding.tvSummaryProtein.text = if (binding.checkProtein.isChecked) "${prefs["protein_goal"]}g" else "Off"
+        binding.tvSummaryCarbs.text = if (binding.checkCarbs.isChecked) "${prefs["carbs_limit"]}g" else "Off"
+        binding.tvSummarySugar.text = if (binding.checkSugar.isChecked) "${prefs["sugar_limit"]}g" else "Off"
+        binding.tvSummarySodium.text = if (binding.checkSodium.isChecked) "${prefs["sodium_limit"]}mg" else "Off"
     }
 
     private fun loadExistingPreferences() {
         database.child("UserPreferences").get().addOnSuccessListener { snapshot ->
             if (snapshot.exists()) {
+                // Restore Checkbox States
+                binding.checkBudget.isChecked = snapshot.child("use_budget").getValue(Boolean::class.java) ?: false
+                binding.checkProtein.isChecked = snapshot.child("use_protein").getValue(Boolean::class.java) ?: false
+                binding.checkCarbs.isChecked = snapshot.child("use_carbs").getValue(Boolean::class.java) ?: false
+                binding.checkSugar.isChecked = snapshot.child("use_sugar").getValue(Boolean::class.java) ?: false
+                binding.checkSodium.isChecked = snapshot.child("use_sodium").getValue(Boolean::class.java) ?: false
+
+                // Restore Summary UI
                 val diet = snapshot.child("dietary_type").value.toString()
                 binding.tvSummaryDiet.text = diet
-
-                val budget = (snapshot.child("budget_limit").value as? Long)?.toInt() ?: 0
-                binding.tvSummaryBudget.text = "₱$budget"
-
-                // Load and set other summary values
+                binding.tvSummaryBudget.text = "₱${snapshot.child("budget_limit").value ?: 0}"
                 binding.tvSummaryProtein.text = "${snapshot.child("protein_goal").value ?: 0}g"
                 binding.tvSummaryCarbs.text = "${snapshot.child("carbs_limit").value ?: 0}g"
                 binding.tvSummarySugar.text = "${snapshot.child("sugar_limit").value ?: 0}g"
