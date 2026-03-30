@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SearchView
 import androidx.recyclerview.widget.GridLayoutManager
 import com.example.ilutomo.databinding.ActivityHomeBinding
 import com.google.firebase.database.*
@@ -18,6 +19,9 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var recipeAdapter: RecipeAdapter
 
     private var userDiet = "Standard"
+    private var searchQuery = ""
+
+    // Preference States
     private var useB = false; private var bMin = 0; private var bMax = 10000
     private var useP = false; private var pMin = 0; private var pMax = 5000
     private var useC = false; private var cMin = 0; private var cMax = 5000
@@ -31,7 +35,22 @@ class HomeActivity : AppCompatActivity() {
 
         setupRecyclerView()
         setupBottomNavigation()
+        setupSearch()
         loadIngredientLibrary()
+    }
+
+    private fun setupSearch() {
+        binding.searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+            override fun onQueryTextSubmit(query: String?): Boolean {
+                return false
+            }
+
+            override fun onQueryTextChange(newText: String?): Boolean {
+                searchQuery = newText.orEmpty()
+                applyFilters()
+                return true
+            }
+        })
     }
 
     private fun setupRecyclerView() {
@@ -89,8 +108,7 @@ class HomeActivity : AppCompatActivity() {
                             val qty = amt.toString().toDoubleOrNull() ?: 0.0
                             val lib = ingredientLibrary[name]
                             if (lib != null) {
-                                val isPiece = name.contains("Egg", true) || name.contains("Wrapper", true) || name.contains("Banana", true)
-                                val factor = if (isPiece) qty else (qty / 50.0)
+                                val factor = if (name.contains("Egg", true) || name.contains("Wrapper", true)) qty else (qty / 50.0)
                                 price += factor * (lib.child("price").getValue(Double::class.java) ?: 0.0)
                                 pro += factor * (lib.child("pro").getValue(Double::class.java) ?: 0.0)
                                 carb += factor * (lib.child("carb").getValue(Double::class.java) ?: 0.0)
@@ -99,13 +117,7 @@ class HomeActivity : AppCompatActivity() {
                             }
                         }
                         r.calculatedPrice = price
-                        // THESE KEYS MUST MATCH YOUR ADAPTER
-                        r.macros = mapOf(
-                            "Protein" to "${pro.toInt()}g",
-                            "Carbs" to "${carb.toInt()}g",
-                            "Sugar" to "${sug.toInt()}g",
-                            "Sodium" to "${sod.toInt()}mg"
-                        )
+                        r.macros = mapOf("Protein" to "${pro.toInt()}g", "Carbs" to "${carb.toInt()}g", "Sugar" to "${sug.toInt()}g", "Sodium" to "${sod.toInt()}mg")
                         allRecipes.add(r)
                     }
                 }
@@ -118,16 +130,23 @@ class HomeActivity : AppCompatActivity() {
     private fun applyFilters() {
         filteredList.clear()
         val results = allRecipes.filter { r ->
+            // 1. Search Filter
+            val matchesSearch = r.title.contains(searchQuery, ignoreCase = true)
+
+            // 2. Dietary Filter
             val matchesDiet = userDiet == "Standard" || r.category.equals(userDiet, ignoreCase = true)
+
+            // 3. Macro Helpers
             fun getM(key: String) = r.macros?.get(key)?.filter { it.isDigit() }?.toIntOrNull() ?: 0
 
+            // 4. Range Logic
             val bOk = if (useB) (r.calculatedPrice >= bMin && r.calculatedPrice <= bMax) else true
             val pOk = if (useP) (getM("Protein") >= pMin && getM("Protein") <= pMax) else true
             val cOk = if (useC) (getM("Carbs") >= cMin && getM("Carbs") <= cMax) else true
             val sOk = if (useS) (getM("Sugar") >= sMin && getM("Sugar") <= sMax) else true
             val naOk = if (useNa) (getM("Sodium") >= naMin && getM("Sodium") <= naMax) else true
 
-            matchesDiet && bOk && pOk && cOk && sOk && naOk
+            matchesSearch && matchesDiet && bOk && pOk && cOk && sOk && naOk
         }
         filteredList.addAll(results)
         recipeAdapter.notifyDataSetChanged()
