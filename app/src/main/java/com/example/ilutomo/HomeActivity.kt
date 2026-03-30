@@ -14,17 +14,15 @@ class HomeActivity : AppCompatActivity() {
     private val database = FirebaseDatabase.getInstance().reference
     private val allRecipes = mutableListOf<Recipe>()
     private val filteredList = mutableListOf<Recipe>()
-    private val ingredientLibrary = mutableMapOf<String, Double>()
+    private val ingredientLibrary = mutableMapOf<String, DataSnapshot>()
     private lateinit var recipeAdapter: RecipeAdapter
 
-    // Preference Flags
     private var userDiet = "Standard"
-    private var userAllergens = mutableListOf<String>()
-    private var useBudget = false; private var budgetMax = 1000
-    private var useProtein = false; private var proteinMin = 0
-    private var useCarbs = false; private var carbsMax = 100
-    private var useSugar = false; private var sugarMax = 100
-    private var useSodium = false; private var sodiumMax = 1000
+    private var useB = false; private var bMin = 0; private var bMax = 10000
+    private var useP = false; private var pMin = 0; private var pMax = 5000
+    private var useC = false; private var cMin = 0; private var cMax = 5000
+    private var useS = false; private var sMin = 0; private var sMax = 5000
+    private var useNa = false; private var naMin = 0; private var naMax = 20000
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,115 +35,107 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupRecyclerView() {
-        // Updated: The click now triggers the selection save
-        recipeAdapter = RecipeAdapter(filteredList) { recipe ->
-            saveToUserSelection(recipe)
-        }
+        recipeAdapter = RecipeAdapter(filteredList) { r -> saveSelection(r) }
         binding.rvHomeRecipes.layoutManager = GridLayoutManager(this, 2)
         binding.rvHomeRecipes.adapter = recipeAdapter
     }
 
     private fun loadIngredientLibrary() {
         database.child("ingredient_library").addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                for (child in snapshot.children) {
-                    val price = child.child("price").getValue(Double::class.java) ?: 0.0
-                    ingredientLibrary[child.key ?: ""] = price
-                }
-                fetchUserPreferences()
+            override fun onDataChange(s: DataSnapshot) {
+                ingredientLibrary.clear()
+                for (child in s.children) ingredientLibrary[child.key ?: ""] = child
+                fetchPreferences()
             }
-            override fun onCancelled(error: DatabaseError) {}
+            override fun onCancelled(e: DatabaseError) {}
         })
     }
 
-    private fun fetchUserPreferences() {
+    private fun fetchPreferences() {
         database.child("UserPreferences").addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (snapshot.exists()) {
-                    userDiet = snapshot.child("dietary_type").value?.toString() ?: "Standard"
-                    useBudget = snapshot.child("use_budget").getValue(Boolean::class.java) ?: false
-                    useProtein = snapshot.child("use_protein").getValue(Boolean::class.java) ?: false
-                    useCarbs = snapshot.child("use_carbs").getValue(Boolean::class.java) ?: false
-                    useSugar = snapshot.child("use_sugar").getValue(Boolean::class.java) ?: false
-                    useSodium = snapshot.child("use_sodium").getValue(Boolean::class.java) ?: false
+            override fun onDataChange(s: DataSnapshot) {
+                if (s.exists()) {
+                    userDiet = s.child("dietary_type").value?.toString() ?: "Standard"
+                    useB = s.child("use_budget").getValue(Boolean::class.java) ?: false
+                    useP = s.child("use_protein").getValue(Boolean::class.java) ?: false
+                    useC = s.child("use_carbs").getValue(Boolean::class.java) ?: false
+                    useS = s.child("use_sugar").getValue(Boolean::class.java) ?: false
+                    useNa = s.child("use_sodium").getValue(Boolean::class.java) ?: false
 
-                    budgetMax = (snapshot.child("budget_limit").value as? Long)?.toInt() ?: 1000
-                    proteinMin = (snapshot.child("protein_goal").value as? Long)?.toInt() ?: 0
-                    carbsMax = (snapshot.child("carbs_limit").value as? Long)?.toInt() ?: 100
-                    sugarMax = (snapshot.child("sugar_limit").value as? Long)?.toInt() ?: 100
-                    sodiumMax = (snapshot.child("sodium_limit").value as? Long)?.toInt() ?: 1000
-
-                    userAllergens.clear()
-                    snapshot.child("allergens").children.forEach { it.value?.let { v -> userAllergens.add(v.toString()) } }
+                    fun getVal(key: String, default: Int) = s.child(key).value?.toString()?.toDouble()?.toInt() ?: default
+                    bMin = getVal("budget_min", 0); bMax = getVal("budget_max", 10000)
+                    pMin = getVal("protein_min", 0); pMax = getVal("protein_max", 5000)
+                    cMin = getVal("carbs_min", 0); cMax = getVal("carbs_max", 5000)
+                    sMin = getVal("sugar_min", 0); sMax = getVal("sugar_max", 5000)
+                    naMin = getVal("sodium_min", 0); naMax = getVal("sodium_max", 20000)
                 }
-                loadRecipesFromFirebase()
+                loadRecipes()
             }
-            override fun onCancelled(error: DatabaseError) {}
+            override fun onCancelled(e: DatabaseError) {}
         })
     }
 
-    private fun loadRecipesFromFirebase() {
+    private fun loadRecipes() {
         database.addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
+            override fun onDataChange(s: DataSnapshot) {
                 allRecipes.clear()
-                for (child in snapshot.children) {
+                for (child in s.children) {
                     if (child.key?.startsWith("recipe_") == true) {
-                        val recipe = child.getValue(Recipe::class.java)
-                        recipe?.let {
-                            it.id = child.key!!
+                        val r = child.getValue(Recipe::class.java) ?: continue
+                        r.id = child.key!!
+                        var price = 0.0; var pro = 0.0; var carb = 0.0; var sug = 0.0; var sod = 0.0
 
-                            // CALCULATE PRICE BREAKDOWN
-                            var priceSum = 0.0
-                            it.ingredients?.forEach { (name, amt) ->
-                                val qty = amt.toString().toDoubleOrNull() ?: 0.0
-                                priceSum += (qty * (ingredientLibrary[name] ?: 0.0))
+                        r.ingredients?.forEach { (name, amt) ->
+                            val qty = amt.toString().toDoubleOrNull() ?: 0.0
+                            val lib = ingredientLibrary[name]
+                            if (lib != null) {
+                                val isPiece = name.contains("Egg", true) || name.contains("Wrapper", true) || name.contains("Banana", true)
+                                val factor = if (isPiece) qty else (qty / 50.0)
+                                price += factor * (lib.child("price").getValue(Double::class.java) ?: 0.0)
+                                pro += factor * (lib.child("pro").getValue(Double::class.java) ?: 0.0)
+                                carb += factor * (lib.child("carb").getValue(Double::class.java) ?: 0.0)
+                                sug += factor * (lib.child("sugar").getValue(Double::class.java) ?: 0.0)
+                                sod += factor * (lib.child("sodium").getValue(Double::class.java) ?: 0.0)
                             }
-                            it.calculatedPrice = priceSum
-                            allRecipes.add(it)
                         }
+                        r.calculatedPrice = price
+                        // THESE KEYS MUST MATCH YOUR ADAPTER
+                        r.macros = mapOf(
+                            "Protein" to "${pro.toInt()}g",
+                            "Carbs" to "${carb.toInt()}g",
+                            "Sugar" to "${sug.toInt()}g",
+                            "Sodium" to "${sod.toInt()}mg"
+                        )
+                        allRecipes.add(r)
                     }
                 }
                 applyFilters()
             }
-            override fun onCancelled(error: DatabaseError) {}
+            override fun onCancelled(e: DatabaseError) {}
         })
     }
 
     private fun applyFilters() {
         filteredList.clear()
-        val results = allRecipes.filter { recipe ->
-            val matchesDiet = userDiet == "Standard" || recipe.category.equals(userDiet, ignoreCase = true)
-            val isSafe = !(recipe.allergens?.any { it in userAllergens } ?: false)
+        val results = allRecipes.filter { r ->
+            val matchesDiet = userDiet == "Standard" || r.category.equals(userDiet, ignoreCase = true)
+            fun getM(key: String) = r.macros?.get(key)?.filter { it.isDigit() }?.toIntOrNull() ?: 0
 
-            val rProtein = getMacroValue(recipe.macros, "Protein")
-            val rCarbs   = getMacroValue(recipe.macros, "Carbs")
-            val rSugar   = getMacroValue(recipe.macros, "Sugar")
-            val rSodium  = getMacroValue(recipe.macros, "Sodium")
+            val bOk = if (useB) (r.calculatedPrice >= bMin && r.calculatedPrice <= bMax) else true
+            val pOk = if (useP) (getM("Protein") >= pMin && getM("Protein") <= pMax) else true
+            val cOk = if (useC) (getM("Carbs") >= cMin && getM("Carbs") <= cMax) else true
+            val sOk = if (useS) (getM("Sugar") >= sMin && getM("Sugar") <= sMax) else true
+            val naOk = if (useNa) (getM("Sodium") >= naMin && getM("Sodium") <= naMax) else true
 
-            val budgetOk = if (useBudget) recipe.calculatedPrice <= budgetMax else true
-            val proteinOk = if (useProtein) rProtein >= proteinMin else true
-            val carbsOk = if (useCarbs) rCarbs <= carbsMax else true
-            val sugarOk = if (useSugar) rSugar <= sugarMax else true
-            val sodiumOk = if (useSodium) rSodium <= sodiumMax else true
-
-            matchesDiet && isSafe && budgetOk && proteinOk && carbsOk && sugarOk && sodiumOk
+            matchesDiet && bOk && pOk && cOk && sOk && naOk
         }
         filteredList.addAll(results)
         recipeAdapter.notifyDataSetChanged()
     }
 
-    private fun getMacroValue(map: Map<String, String>?, key: String): Int {
-        val entry = map?.entries?.find { it.key.equals(key, ignoreCase = true) }
-        return entry?.value?.filter { it.isDigit() }?.toIntOrNull() ?: 0
-    }
-
-    private fun saveToUserSelection(recipe: Recipe) {
-        val recipeKey = recipe.title.ifEmpty { "Unnamed_Recipe" }.replace(" ", "_")
-        // Saving the recipe with its CALCULATED PRICE included
-        database.child("UserSelection").child(recipeKey).setValue(recipe)
-            .addOnSuccessListener {
-                Toast.makeText(this, "Added to Recipes!", Toast.LENGTH_SHORT).show()
-            }
+    private fun saveSelection(r: Recipe) {
+        database.child("UserSelection").child(r.title.replace(" ", "_")).setValue(r)
+            .addOnSuccessListener { Toast.makeText(this, "Added!", Toast.LENGTH_SHORT).show() }
     }
 
     private fun setupBottomNavigation() {

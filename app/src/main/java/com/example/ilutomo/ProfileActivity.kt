@@ -6,11 +6,13 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.ilutomo.databinding.ActivityProfileBinding
 import com.google.firebase.database.FirebaseDatabase
+import kotlin.math.ceil
 
 class ProfileActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityProfileBinding
     private val database = FirebaseDatabase.getInstance().reference
+    private val ingredientLibrary = mutableMapOf<String, Map<String, Double>>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -19,122 +21,116 @@ class ProfileActivity : AppCompatActivity() {
 
         setupBottomNavigation()
         setupRangeListeners()
-        loadExistingPreferences()
+        loadIngredientLibrary()
 
-        binding.btnSave.setOnClickListener {
-            savePreferences()
-        }
-
+        binding.btnSave.setOnClickListener { savePreferences() }
         binding.btnViewDiary.setOnClickListener {
             startActivity(Intent(this, DiaryActivity::class.java))
         }
     }
 
+    private fun loadIngredientLibrary() {
+        database.child("ingredient_library").get().addOnSuccessListener { snapshot ->
+            for (data in snapshot.children) {
+                val stats = data.children.associate { it.key!! to (it.value?.toString()?.toDoubleOrNull() ?: 0.0) }
+                ingredientLibrary[data.key!!] = stats
+            }
+            calculateAndSetSliderRanges()
+        }
+    }
+
+    private fun calculateAndSetSliderRanges() {
+        database.get().addOnSuccessListener { snapshot ->
+            val prices = mutableListOf<Float>()
+            val proteins = mutableListOf<Float>()
+            val carbs = mutableListOf<Float>()
+            val sugars = mutableListOf<Float>()
+            val sodiums = mutableListOf<Float>()
+
+            for (child in snapshot.children) {
+                if (child.key?.startsWith("recipe_") == true) {
+                    var pT = 0.0; var proT = 0.0; var cT = 0.0; var sT = 0.0; var naT = 0.0
+                    val ingredients = child.child("ingredients").value as? Map<String, Any>
+
+                    ingredients?.forEach { (name, amt) ->
+                        val qty = amt.toString().toDoubleOrNull() ?: 0.0
+                        val lib = ingredientLibrary[name]
+                        if (lib != null) {
+                            val isPiece = name.contains("Egg", true) || name.contains("Wrapper", true) || name.contains("Banana", true)
+                            val factor = if (isPiece) qty else (qty / 50.0)
+                            pT += factor * (lib["price"] ?: 0.0)
+                            proT += factor * (lib["pro"] ?: 0.0)
+                            cT += factor * (lib["carb"] ?: 0.0)
+                            sT += factor * (lib["sugar"] ?: 0.0)
+                            naT += factor * (lib["sodium"] ?: 0.0)
+                        }
+                    }
+                    prices.add(pT.toFloat()); proteins.add(proT.toFloat())
+                    carbs.add(cT.toFloat()); sugars.add(sT.toFloat()); sodiums.add(naT.toFloat())
+                }
+            }
+
+            // Dynamic Max with Buffer (Rounding up to nearest 10 or 100)
+            binding.rangeBudget.valueTo = (ceil((prices.maxOrNull() ?: 1000f) / 100.0) * 100.0).toFloat().coerceAtLeast(500f)
+            binding.rangeProtein.valueTo = (ceil((proteins.maxOrNull() ?: 100f) / 10.0) * 10.0).toFloat().coerceAtLeast(50f)
+            binding.rangeCarbs.valueTo = (ceil((carbs.maxOrNull() ?: 200f) / 10.0) * 10.0).toFloat().coerceAtLeast(100f)
+            binding.rangeSugar.valueTo = (ceil((sugars.maxOrNull() ?: 100f) / 10.0) * 10.0).toFloat().coerceAtLeast(50f)
+            binding.rangeSodium.valueTo = (ceil((sodiums.maxOrNull() ?: 2000f) / 500.0) * 500.0).toFloat().coerceAtLeast(1000f)
+
+            loadExistingPreferences()
+        }
+    }
+
     private fun setupRangeListeners() {
-        binding.rangeBudget.addOnChangeListener { slider, _, _ ->
-            val min = slider.values[0].toInt()
-            val max = slider.values[1].toInt()
-            binding.checkBudget.text = "Budget  ₱$min-$max"
-            binding.tvSummaryBudget.text = "₱$max"
-        }
-
-        binding.rangeProtein.addOnChangeListener { slider, _, _ ->
-            val min = slider.values[0].toInt()
-            val max = slider.values[1].toInt()
-            binding.checkProtein.text = "Protein  G$min-$max"
-            binding.tvSummaryProtein.text = "${max}g"
-        }
-
-        binding.rangeCarbs.addOnChangeListener { slider, _, _ ->
-            val min = slider.values[0].toInt()
-            val max = slider.values[1].toInt()
-            binding.checkCarbs.text = "Carbs   G$min-$max"
-            binding.tvSummaryCarbs.text = "${max}g"
-        }
-
-        binding.rangeSugar.addOnChangeListener { slider, _, _ ->
-            val min = slider.values[0].toInt()
-            val max = slider.values[1].toInt()
-            binding.checkSugar.text = "Sugar   G$min-$max"
-            binding.tvSummarySugar.text = "${max}g"
-        }
-
-        binding.rangeSodium.addOnChangeListener { slider, _, _ ->
-            val min = slider.values[0].toInt()
-            val max = slider.values[1].toInt()
-            binding.checkSodium.text = "Sodium  G$min-$max"
-            binding.tvSummarySodium.text = "${max}mg"
-        }
+        binding.rangeBudget.addOnChangeListener { s, _, _ -> binding.checkBudget.text = "Budget ₱${s.values[0].toInt()}-${s.values[1].toInt()}" }
+        binding.rangeProtein.addOnChangeListener { s, _, _ -> binding.checkProtein.text = "Protein ${s.values[0].toInt()}g-${s.values[1].toInt()}g" }
+        binding.rangeCarbs.addOnChangeListener { s, _, _ -> binding.checkCarbs.text = "Carbs ${s.values[0].toInt()}g-${s.values[1].toInt()}g" }
+        binding.rangeSugar.addOnChangeListener { s, _, _ -> binding.checkSugar.text = "Sugar ${s.values[0].toInt()}g-${s.values[1].toInt()}g" }
+        binding.rangeSodium.addOnChangeListener { s, _, _ -> binding.checkSodium.text = "Sodium ${s.values[0].toInt()}mg-${s.values[1].toInt()}mg" }
     }
 
     private fun savePreferences() {
         val diet = when {
-            binding.cbKeto.isChecked -> "Keto"
-            binding.cbVegetarian.isChecked -> "Vegetarian"
-            binding.cbPescatarian.isChecked -> "Pescatarian"
-            else -> "Standard"
+            binding.cbKeto.isChecked -> "Keto"; binding.cbVegetarian.isChecked -> "Vegetarian"
+            binding.cbPescatarian.isChecked -> "Pescatarian"; else -> "Standard"
         }
-
-        val allergens = mutableListOf<String>()
-        if (binding.cbPeanuts.isChecked) allergens.add("Peanuts")
-        if (binding.cbShellfish.isChecked) allergens.add("Shellfish")
-        if (binding.cbDairy.isChecked) allergens.add("Dairy")
-
-        // We now save the 'isChecked' state so HomeActivity knows if it should filter
         val prefs = mapOf(
             "dietary_type" to diet,
-            "allergens" to allergens,
             "use_budget" to binding.checkBudget.isChecked,
-            "budget_limit" to binding.rangeBudget.values[1].toInt(),
+            "budget_min" to binding.rangeBudget.values[0].toInt(), "budget_max" to binding.rangeBudget.values[1].toInt(),
             "use_protein" to binding.checkProtein.isChecked,
-            "protein_goal" to binding.rangeProtein.values[1].toInt(),
+            "protein_min" to binding.rangeProtein.values[0].toInt(), "protein_max" to binding.rangeProtein.values[1].toInt(),
             "use_carbs" to binding.checkCarbs.isChecked,
-            "carbs_limit" to binding.rangeCarbs.values[1].toInt(),
+            "carbs_min" to binding.rangeCarbs.values[0].toInt(), "carbs_max" to binding.rangeCarbs.values[1].toInt(),
             "use_sugar" to binding.checkSugar.isChecked,
-            "sugar_limit" to binding.rangeSugar.values[1].toInt(),
+            "sugar_min" to binding.rangeSugar.values[0].toInt(), "sugar_max" to binding.rangeSugar.values[1].toInt(),
             "use_sodium" to binding.checkSodium.isChecked,
-            "sodium_limit" to binding.rangeSodium.values[1].toInt()
+            "sodium_min" to binding.rangeSodium.values[0].toInt(), "sodium_max" to binding.rangeSodium.values[1].toInt()
         )
-
         database.child("UserPreferences").setValue(prefs).addOnSuccessListener {
-            updateSummaryUI(diet, allergens, prefs)
             Toast.makeText(this, "Preferences Saved!", Toast.LENGTH_SHORT).show()
         }
-    }
-
-    private fun updateSummaryUI(diet: String, allergens: List<String>, prefs: Map<String, Any>) {
-        binding.tvSummaryDiet.text = diet
-        binding.tvSummaryAllergens.text = if (allergens.isEmpty()) "None" else allergens.joinToString(", ")
-
-        // Only show values in summary if the filter is enabled
-        binding.tvSummaryBudget.text = if (binding.checkBudget.isChecked) "₱${prefs["budget_limit"]}" else "Off"
-        binding.tvSummaryProtein.text = if (binding.checkProtein.isChecked) "${prefs["protein_goal"]}g" else "Off"
-        binding.tvSummaryCarbs.text = if (binding.checkCarbs.isChecked) "${prefs["carbs_limit"]}g" else "Off"
-        binding.tvSummarySugar.text = if (binding.checkSugar.isChecked) "${prefs["sugar_limit"]}g" else "Off"
-        binding.tvSummarySodium.text = if (binding.checkSodium.isChecked) "${prefs["sodium_limit"]}mg" else "Off"
     }
 
     private fun loadExistingPreferences() {
         database.child("UserPreferences").get().addOnSuccessListener { snapshot ->
             if (snapshot.exists()) {
-                // Restore Checkbox States
+                fun updateS(slider: com.google.android.material.slider.RangeSlider, minK: String, maxK: String) {
+                    val min = snapshot.child(minK).value?.toString()?.toFloat() ?: 0f
+                    val max = snapshot.child(maxK).value?.toString()?.toFloat() ?: slider.valueTo
+                    slider.values = listOf(min, max.coerceAtMost(slider.valueTo))
+                }
+                updateS(binding.rangeBudget, "budget_min", "budget_max")
+                updateS(binding.rangeProtein, "protein_min", "protein_max")
+                updateS(binding.rangeCarbs, "carbs_min", "carbs_max")
+                updateS(binding.rangeSugar, "sugar_min", "sugar_max")
+                updateS(binding.rangeSodium, "sodium_min", "sodium_max")
+
                 binding.checkBudget.isChecked = snapshot.child("use_budget").getValue(Boolean::class.java) ?: false
                 binding.checkProtein.isChecked = snapshot.child("use_protein").getValue(Boolean::class.java) ?: false
                 binding.checkCarbs.isChecked = snapshot.child("use_carbs").getValue(Boolean::class.java) ?: false
                 binding.checkSugar.isChecked = snapshot.child("use_sugar").getValue(Boolean::class.java) ?: false
                 binding.checkSodium.isChecked = snapshot.child("use_sodium").getValue(Boolean::class.java) ?: false
-
-                // Restore Summary UI
-                val diet = snapshot.child("dietary_type").value.toString()
-                binding.tvSummaryDiet.text = diet
-                binding.tvSummaryBudget.text = "₱${snapshot.child("budget_limit").value ?: 0}"
-                binding.tvSummaryProtein.text = "${snapshot.child("protein_goal").value ?: 0}g"
-                binding.tvSummaryCarbs.text = "${snapshot.child("carbs_limit").value ?: 0}g"
-                binding.tvSummarySugar.text = "${snapshot.child("sugar_limit").value ?: 0}g"
-                binding.tvSummarySodium.text = "${snapshot.child("sodium_limit").value ?: 0}mg"
-
-                val allergensList = snapshot.child("allergens").children.map { it.value.toString() }
-                binding.tvSummaryAllergens.text = if (allergensList.isEmpty()) "None" else allergensList.joinToString(", ")
             }
         }
     }

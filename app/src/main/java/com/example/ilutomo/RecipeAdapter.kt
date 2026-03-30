@@ -36,11 +36,13 @@ class RecipeAdapter(
         // Display Calculated Price
         holder.price.text = "₱${String.format("%.2f", recipe.calculatedPrice)}"
 
-        // Display Macros breakdown
+        // FIX: Changed "Kcal" to "Carbs" to match HomeActivity keys
         val p = getMacro(recipe.macros, "Protein")
         val s = getMacro(recipe.macros, "Sugar")
-        val kcal = getMacro(recipe.macros, "Kcal")
-        holder.macros.text = "P: $p | S: $s | $kcal"
+        val c = getMacro(recipe.macros, "Carbs")
+
+        // This will now show: P: 325g | S: 245g | 120g (instead of 0g)
+        holder.macros.text = "P: $p | S: $s | C: $c"
 
         // Handle Image
         val context = holder.itemView.context

@@ -24,6 +24,7 @@ class RecipesActivity : AppCompatActivity() {
     private lateinit var rvAvailable: RecyclerView
     private var currentIngredients = mutableListOf<DisplayIngredient>()
     private var currentRecipe: Recipe? = null
+    // Changed to Map<String, Double> to handle price, cal, pro, etc.
     private val ingredientLibrary = mutableMapOf<String, Map<String, Double>>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -160,6 +161,10 @@ class RecipesActivity : AppCompatActivity() {
     private fun showAccurateMacrosDialog(recipe: Recipe) {
         val builder = StringBuilder("DETAILED BREAKDOWN:\n---\n")
         var totalCals = 0.0
+        var totalProtein = 0.0
+        var totalSugar = 0.0
+        var totalPrice = 0.0
+
         val ings = recipe.ingredients
 
         if (ings.isNullOrEmpty()) {
@@ -167,26 +172,51 @@ class RecipesActivity : AppCompatActivity() {
         } else {
             ings.forEach { (name, amount) ->
                 val qty = amount.toString().toDoubleOrNull() ?: 0.0
-                val searchKey = name.trim().lowercase()
 
-                // FLEXIBLE MATCH: Checks if keys contain the name (fixes Pepper/Peppercorn)
-                val lib = ingredientLibrary.entries.find {
-                    val key = it.key.trim().lowercase()
-                    key == searchKey || key.contains(searchKey) || searchKey.contains(key)
-                }?.value
+                // Flexible matching for library keys
+                val entry = ingredientLibrary.entries.find {
+                    it.key.equals(name, ignoreCase = true) || it.key.contains(name, ignoreCase = true)
+                }
+                val lib = entry?.value
+                val actualName = entry?.key ?: name
 
                 if (lib != null) {
-                    val cal = qty * (lib["cal"] ?: 0.0)
-                    totalCals += cal
-                    builder.append("• $name: ${cal.toInt()} kcal\n")
+                    // CRITICAL FIX: Portion Factor Logic
+                    val isPieceBased = actualName.contains("Egg", ignoreCase = true) ||
+                            actualName.contains("Wrapper", ignoreCase = true) ||
+                            actualName.contains("Banana", ignoreCase = true)
+
+                    val factor = if (isPieceBased) qty else (qty / 50.0)
+
+                    val itemKcal = factor * (lib["cal"] ?: 0.0)
+                    val itemPro = factor * (lib["pro"] ?: 0.0)
+                    val itemSugar = factor * (lib["sugar"] ?: 0.0)
+                    val itemPrice = factor * (lib["price"] ?: 0.0)
+
+                    totalCals += itemKcal
+                    totalProtein += itemPro
+                    totalSugar += itemSugar
+                    totalPrice += itemPrice
+
+                    builder.append("• $actualName ($qty${if(isPieceBased) "pcs" else "g"}):\n")
+                    builder.append("  ${itemKcal.toInt()} kcal | ₱${"%.2f".format(itemPrice)}\n\n")
                 } else {
-                    builder.append("• $name: (Not in Library)\n")
+                    builder.append("• $name: (Not in Library)\n\n")
                 }
             }
         }
-        builder.append("---\nTotal: ${totalCals.toInt()} kcal")
-        AlertDialog.Builder(this).setTitle(recipe.title).setMessage(builder.toString())
-            .setPositiveButton("Done", null).show()
+
+        builder.append("---\n")
+        builder.append("TOTAL CALORIES: ${totalCals.toInt()} kcal\n")
+        builder.append("TOTAL PROTEIN: ${"%.1f".format(totalProtein)}g\n")
+        builder.append("TOTAL SUGAR: ${"%.1f".format(totalSugar)}g\n")
+        builder.append("TOTAL PRICE: ₱${"%.2f".format(totalPrice)}")
+
+        AlertDialog.Builder(this)
+            .setTitle(recipe.title)
+            .setMessage(builder.toString())
+            .setPositiveButton("Done", null)
+            .show()
     }
 
     private fun showStepsDialog(recipe: Recipe) {
