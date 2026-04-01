@@ -28,9 +28,22 @@
         <activity android:name=".MacrosActivity" android:exported="false" />
         <activity android:name=".CookingStepsActivity" android:exported="false" />
         <activity android:name=".GetIngredientsActivity" android:exported="false" />
-        <activity android:name=".DiaryActivity" />
-        <activity android:name=".EditDiaryActivity" />
+        <activity android:name=".DiaryActivity" android:exported="false" />
+        <activity android:name=".EditDiaryActivity" android:exported="false" />
+
         <activity android:name=".OrderConfirmationActivity" android:exported="false" />
+        <activity android:name=".BusinessDashboardActivity" android:exported="false" />
+
+        <activity
+            android:name=".EditProfileActivity"
+            android:exported="false"
+            android:parentActivityName=".ProfileActivity"
+            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar"
+            android:screenOrientation="portrait">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".ProfileActivity" />
+        </activity>
 
     </application>
 </manifest>

@@ -33,6 +33,13 @@ class HomeActivity : AppCompatActivity() {
         binding = ActivityHomeBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // --- FIXED: PROFILE ICON CLICK LISTENER ---
+        // This matches your XML ID: android:id="@+id/ivHomeProfile"
+        binding.ivHomeProfile.setOnClickListener {
+            val intent = Intent(this, EditProfileActivity::class.java)
+            startActivity(intent)
+        }
+
         setupRecyclerView()
         setupBottomNavigation()
         setupSearch()
@@ -41,10 +48,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun setupSearch() {
         binding.searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                return false
-            }
-
+            override fun onQueryTextSubmit(query: String?): Boolean = false
             override fun onQueryTextChange(newText: String?): Boolean {
                 searchQuery = newText.orEmpty()
                 applyFilters()
@@ -117,7 +121,12 @@ class HomeActivity : AppCompatActivity() {
                             }
                         }
                         r.calculatedPrice = price
-                        r.macros = mapOf("Protein" to "${pro.toInt()}g", "Carbs" to "${carb.toInt()}g", "Sugar" to "${sug.toInt()}g", "Sodium" to "${sod.toInt()}mg")
+                        r.macros = mapOf(
+                            "Protein" to "${pro.toInt()}g",
+                            "Carbs" to "${carb.toInt()}g",
+                            "Sugar" to "${sug.toInt()}g",
+                            "Sodium" to "${sod.toInt()}mg"
+                        )
                         allRecipes.add(r)
                     }
                 }
@@ -130,16 +139,10 @@ class HomeActivity : AppCompatActivity() {
     private fun applyFilters() {
         filteredList.clear()
         val results = allRecipes.filter { r ->
-            // 1. Search Filter
             val matchesSearch = r.title.contains(searchQuery, ignoreCase = true)
-
-            // 2. Dietary Filter
             val matchesDiet = userDiet == "Standard" || r.category.equals(userDiet, ignoreCase = true)
-
-            // 3. Macro Helpers
             fun getM(key: String) = r.macros?.get(key)?.filter { it.isDigit() }?.toIntOrNull() ?: 0
 
-            // 4. Range Logic
             val bOk = if (useB) (r.calculatedPrice >= bMin && r.calculatedPrice <= bMax) else true
             val pOk = if (useP) (getM("Protein") >= pMin && getM("Protein") <= pMax) else true
             val cOk = if (useC) (getM("Carbs") >= cMin && getM("Carbs") <= cMax) else true
