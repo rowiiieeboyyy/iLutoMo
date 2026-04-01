@@ -3,24 +3,28 @@ package com.example.ilutomo
 import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
-import com.example.ilutomo.databinding.ActivityBusinessDashboardBinding
+import com.example.ilutomo.databinding.ActivityBusinessManageBinding
 
-class BusinessDashboardActivity : AppCompatActivity() {
-    private lateinit var binding: ActivityBusinessDashboardBinding
+class BusinessManageActivity : AppCompatActivity() {
+    private lateinit var binding: ActivityBusinessManageBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityBusinessDashboardBinding.inflate(layoutInflater)
+        binding = ActivityBusinessManageBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         setupBottomNavigation()
     }
 
     private fun setupBottomNavigation() {
-        binding.businessBottomNav.selectedItemId = R.id.nav_business_dashboard
+        binding.businessBottomNav.selectedItemId = R.id.nav_business_manage
         binding.businessBottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
-                R.id.nav_business_dashboard -> true
+                R.id.nav_business_dashboard -> {
+                    startActivity(Intent(this, BusinessDashboardActivity::class.java))
+                    finish()
+                    true
+                }
                 R.id.nav_business_inventory -> {
                     startActivity(Intent(this, BusinessInventoryActivity::class.java))
                     finish()
@@ -31,11 +35,7 @@ class BusinessDashboardActivity : AppCompatActivity() {
                     finish()
                     true
                 }
-                R.id.nav_business_manage -> {
-                    startActivity(Intent(this, BusinessManageActivity::class.java))
-                    finish()
-                    true
-                }
+                R.id.nav_business_manage -> true
                 R.id.nav_business_profile -> {
                     startActivity(Intent(this, BusinessProfileActivity::class.java))
                     finish()

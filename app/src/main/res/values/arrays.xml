@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <array name="initial_range_values">
-        <item>0.0</item>
-        <item>100.0</item>
-    </array>
+    <string-array name="size_units">
+        <item>g</item>
+        <item>ml</item>
+    </string-array>
+    <string-array name="initial_range_values">
+        <item>0</item>
+        <item>100</item>
+    </string-array>
 </resources>

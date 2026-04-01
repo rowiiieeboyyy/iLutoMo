@@ -36,6 +36,11 @@ class ProfileActivity : AppCompatActivity() {
         binding.btnViewDiary.setOnClickListener {
             startActivity(Intent(this, DiaryActivity::class.java))
         }
+        
+        // --- NEW: CLICK LISTENER FOR VIEW ORDERS ---
+        binding.btnViewOrders.setOnClickListener {
+            startActivity(Intent(this, OrdersActivity::class.java))
+        }
     }
 
     private fun loadIngredientLibrary() {

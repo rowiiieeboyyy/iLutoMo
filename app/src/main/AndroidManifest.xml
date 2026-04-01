@@ -24,6 +24,7 @@
         <activity android:name=".RecipesActivity" android:exported="false" />
         <activity android:name=".PantryActivity" android:exported="false" />
         <activity android:name=".ProfileActivity" android:exported="false" />
+        <activity android:name=".OrdersActivity" android:exported="false" />
 
         <activity android:name=".MacrosActivity" android:exported="false" />
         <activity android:name=".CookingStepsActivity" android:exported="false" />
@@ -33,6 +34,10 @@
 
         <activity android:name=".OrderConfirmationActivity" android:exported="false" />
         <activity android:name=".BusinessDashboardActivity" android:exported="false" />
+        <activity android:name=".BusinessInventoryActivity" android:exported="false" />
+        <activity android:name=".BusinessOrdersActivity" android:exported="false" />
+        <activity android:name=".BusinessManageActivity" android:exported="false" />
+        <activity android:name=".BusinessProfileActivity" android:exported="false" />
 
         <activity
             android:name=".EditProfileActivity"

@@ -25,115 +25,81 @@
         android:layout_marginTop="12dp"
         app:layout_constraintTop_toBottomOf="@id/tvPantryTitle" />
 
-    <TextView
-        android:id="@+id/tvSelectedLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Selected Recipes:"
-        android:textStyle="bold"
-        android:textColor="#1B3022"
-        android:layout_margin="16dp"
-        app:layout_constraintTop_toBottomOf="@id/pantryDivider"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <LinearLayout
-        android:id="@+id/llRecipeList"
-        android:layout_width="0dp"
+    <ScrollView
+        android:id="@+id/svPantryContent"
+        android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:orientation="vertical"
-        android:padding="8dp"
-        app:layout_constraintTop_toBottomOf="@id/tvSelectedLabel"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toStartOf="@+id/cvIngredientSummary"
-        app:layout_constraintBottom_toTopOf="@id/bottomNav"
-        app:layout_constraintHorizontal_weight="1.2">
+        android:layout_marginBottom="8dp"
+        app:layout_constraintTop_toBottomOf="@id/pantryDivider"
+        app:layout_constraintBottom_toTopOf="@id/cvIngredientSummary">
+
+        <LinearLayout
+            android:id="@+id/llPantryList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+            <!-- Grouped ingredients will be added here -->
+        </LinearLayout>
+    </ScrollView>
+
+    <androidx.cardview.widget.CardView
+        android:id="@+id/cvIngredientSummary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        app:cardBackgroundColor="#D3D3D3"
+        app:cardCornerRadius="15dp"
+        app:cardElevation="2dp"
+        app:layout_constraintBottom_toTopOf="@id/bottomNav">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="12dp"
-            android:gravity="center_vertical">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Break Fast" android:padding="5dp" android:background="#D3D3D3" android:textSize="10sp" android:layout_marginEnd="3dp"/>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Lunch" android:padding="5dp" android:background="#D3D3D3" android:textSize="10sp" android:layout_marginEnd="3dp"/>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Dinner" android:padding="5dp" android:background="#D3D3D3" android:textSize="10sp"/>
-        </LinearLayout>
-
-        <CheckBox android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Pork Adobo" android:textSize="13sp" android:buttonTint="#1B3022"/>
-        <CheckBox android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Chicken Adobo" android:textSize="13sp" android:buttonTint="#1B3022"/>
-        <CheckBox android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Chicken Tinola" android:textSize="13sp" android:buttonTint="#1B3022"/>
-        <CheckBox android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Pork Giniling" android:textSize="13sp" android:buttonTint="#1B3022"/>
-        <CheckBox android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Beef Caldereta" android:textSize="13sp" android:buttonTint="#1B3022"/>
-    </LinearLayout>
-
-    <androidx.cardview.widget.CardView
-        android:id="@+id/cvIngredientSummary"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_margin="10dp"
-        app:cardBackgroundColor="#D3D3D3"
-        app:cardCornerRadius="25dp"
-        app:cardElevation="0dp"
-        app:layout_constraintTop_toBottomOf="@id/pantryDivider"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toEndOf="@id/llRecipeList"
-        app:layout_constraintBottom_toTopOf="@id/bottomNav"
-        app:layout_constraintHorizontal_weight="1.1">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:padding="16dp">
 
             <TextView
-                android:layout_width="match_parent"
+                android:id="@+id/tvSummaryTitle"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Serving size: 500"
+                android:text="Order Summary"
                 android:textStyle="bold"
+                android:textSize="16sp"
                 android:textColor="#000000"
-                android:background="@drawable/rounded_corner_grey"
-                android:padding="10dp"
-                android:textSize="11sp"
                 android:layout_marginBottom="8dp"/>
 
-            <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content">
-                <TextView android:text="List:" android:textStyle="bold" android:textSize="12sp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#000000"/>
-                <TextView android:text="Price" android:textStyle="bold" android:textSize="12sp" android:layout_alignParentEnd="true" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#000000"/>
-            </RelativeLayout>
-
-            <TextView
-                android:id="@+id/tvIngredientList"
+            <ScrollView
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:text="Pork Belly           50,000\nVinegar              10,000\nGarlic                5,000\nPepper               2,500\nSoy Sauce            10,000\nOnion                5,000"
-                android:textColor="#000000"
-                android:textSize="11sp"
-                android:lineSpacingExtra="5dp"
-                android:layout_marginTop="5dp"/>
+                android:layout_height="100dp">
+                <LinearLayout
+                    android:id="@+id/llOrderSummaryItems"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </ScrollView>
 
             <TextView
                 android:id="@+id/tvTotalPrice"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Total:   82,560"
+                android:text="Total: ₱0.00"
                 android:textStyle="bold"
                 android:gravity="end"
-                android:textSize="12sp"
+                android:textSize="16sp"
                 android:textColor="#000000"
-                android:layout_marginBottom="8dp"/>
+                android:layout_marginBottom="12dp"/>
 
             <Button
                 android:id="@+id/btnGetIngredient"
-                android:layout_width="match_parent"
-                android:layout_height="40dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
                 android:text="Get Ingredient"
                 android:textAllCaps="false"
-                android:textSize="11sp"
-                android:backgroundTint="#BDBDBD"
-                android:textColor="#000000"
-                app:cornerRadius="15dp"/>
+                android:backgroundTint="#1B3022"
+                android:textColor="#FFFFFF"
+                app:cornerRadius="20dp"/>
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
@@ -143,6 +109,9 @@
         android:layout_height="65dp"
         android:background="#FFFFFF"
         app:menu="@menu/bottom_nav_menu"
+        app:labelVisibilityMode="labeled"
+        app:itemIconTint="#4B8A34"
+        app:itemTextColor="#4B8A34"
         app:layout_constraintBottom_toBottomOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -76,7 +76,8 @@
             android:layout_margin="5dp"
             android:padding="10dp">
             <TextView
-                android:text="Available In Pantry:"
+                android:id="@+id/tvPantryLabel"
+                android:text="Add to Pantry:"
                 android:textStyle="bold"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -92,31 +93,46 @@
         android:id="@+id/llActionButtons"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:padding="10dp"
         app:layout_constraintBottom_toTopOf="@id/bottomNav">
 
-        <Button
-            android:id="@+id/btnViewMacros"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_margin="5dp"
-            android:backgroundTint="#D3D3D3"
-            android:text="View Macronutrients"
-            android:textAllCaps="false"
-            android:textColor="#1B3022" />
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/btnViewMacros"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_margin="5dp"
+                android:backgroundTint="#D3D3D3"
+                android:text="View Macronutrients"
+                android:textAllCaps="false"
+                android:textColor="#1B3022" />
+
+            <Button
+                android:id="@+id/btnViewSteps"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_margin="5dp"
+                android:backgroundTint="#D3D3D3"
+                android:text="View Cooking Steps"
+                android:textAllCaps="false"
+                android:textColor="#1B3022" />
+        </LinearLayout>
 
         <Button
-            android:id="@+id/btnViewSteps"
-            android:layout_width="0dp"
+            android:id="@+id/btnAddToPantry"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:layout_margin="5dp"
-            android:backgroundTint="#D3D3D3"
-            android:text="View Cooking Steps"
+            android:backgroundTint="#1B3022"
+            android:text="Add to pantry"
             android:textAllCaps="false"
-            android:textColor="#1B3022" />
+            android:textColor="@android:color/white" />
     </LinearLayout>
 
     <com.google.android.material.bottomnavigation.BottomNavigationView

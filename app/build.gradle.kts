@@ -47,13 +47,14 @@ dependencies {
     // Firebase Bill of Materials (BOM) - keeps versions in sync
     implementation(platform("com.google.firebase:firebase-bom:33.1.0"))
 
-    // --- ADDED THESE TWO LINES ---
-    implementation("com.google.firebase:firebase-auth-ktx")      // For Login/Sign-up
-    implementation("com.google.firebase:firebase-firestore-ktx") // For Account Type storage
-
-    // Existing Firebase libraries
+    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-database-ktx")
+    implementation("com.google.firebase:firebase-storage-ktx")
     implementation("com.google.firebase:firebase-analytics-ktx")
+
+    // Image Loading
+    implementation("com.github.bumptech.glide:glide:4.16.0")
 
     // Standard Android Libraries
     implementation(libs.androidx.core.ktx)

@@ -1,8 +1,8 @@
 [versions]
 # Keep your current Gradle Plugin version
-agp = "8.7.1"
+agp = "9.0.1"
 # Stable Kotlin version
-kotlin = "1.9.24"
+kotlin = "2.2.10"
 # Use stable versions that don't require API 36
 coreKtx = "1.13.1"
 junit = "4.13.2"

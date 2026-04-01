@@ -59,6 +59,9 @@
         android:layout_height="65dp"
         android:background="#FFFFFF"
         app:menu="@menu/bottom_nav_menu"
+        app:labelVisibilityMode="labeled"
+        app:itemIconTint="#4B8A34"
+        app:itemTextColor="#4B8A34"
         app:layout_constraintBottom_toBottomOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

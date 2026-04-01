@@ -36,6 +36,7 @@ class RecipesActivity : AppCompatActivity() {
         val btnChoose = findViewById<Button>(R.id.btnChooseRecipe)
         val btnMacros = findViewById<Button>(R.id.btnViewMacros)
         val btnSteps = findViewById<Button>(R.id.btnViewSteps)
+        val btnAddToPantry = findViewById<Button>(R.id.btnAddToPantry)
         val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNav)
 
         rvAvailable.layoutManager = LinearLayoutManager(this)
@@ -60,6 +61,67 @@ class RecipesActivity : AppCompatActivity() {
         btnSteps.setOnClickListener {
             if (currentRecipe == null) Toast.makeText(this, "Select a recipe first!", Toast.LENGTH_SHORT).show()
             else showStepsDialog(currentRecipe!!)
+        }
+        btnAddToPantry.setOnClickListener {
+            addToPantry()
+        }
+    }
+
+    private fun addToPantry() {
+        if (currentRecipe == null) {
+            Toast.makeText(this, "Please select a recipe first", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val selected = currentIngredients.filter { it.isChecked }
+        if (selected.isEmpty()) {
+            Toast.makeText(this, "No ingredients selected to add", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val pantryRef = FirebaseDatabase.getInstance().getReference("Pantry")
+        val updates = mutableMapOf<String, Any>()
+
+        selected.forEach { ing ->
+            val entry = ingredientLibrary.entries.find {
+                it.key.equals(ing.name, ignoreCase = true) || it.key.contains(ing.name, ignoreCase = true)
+            }
+            val lib = entry?.value
+            val actualName = entry?.key ?: ing.name
+            
+            val qty = ing.amount.replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0
+            
+            var calculatedPrice = 0.0
+            if (lib != null) {
+                val isPieceBased = actualName.contains("Egg", ignoreCase = true) ||
+                        actualName.contains("Wrapper", ignoreCase = true) ||
+                        actualName.contains("Banana", ignoreCase = true)
+
+                val factor = if (isPieceBased) qty else (qty / 50.0)
+                calculatedPrice = factor * (lib["price"] ?: 0.0)
+            }
+            
+            val ingredientData = mapOf(
+                "name" to ing.name,
+                "amount" to ing.amount,
+                "price" to calculatedPrice,
+                "recipeTitle" to (currentRecipe?.title ?: "Unknown")
+            )
+            val key = pantryRef.push().key ?: return@forEach
+            updates[key] = ingredientData
+        }
+
+        pantryRef.updateChildren(updates).addOnSuccessListener {
+            Toast.makeText(this, "Added to Pantry!", Toast.LENGTH_SHORT).show()
+            
+            // Reset page after success
+            currentRecipe = null
+            currentIngredients.clear()
+            findViewById<Button>(R.id.btnChooseRecipe).text = "Select from your added recipes"
+            updateUI()
+
+        }.addOnFailureListener {
+            Toast.makeText(this, "Failed to add: ${it.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -171,7 +233,7 @@ class RecipesActivity : AppCompatActivity() {
             builder.append("No ingredients listed.")
         } else {
             ings.forEach { (name, amount) ->
-                val qty = amount.toString().toDoubleOrNull() ?: 0.0
+                val qty = amount.toString().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0
 
                 // Flexible matching for library keys
                 val entry = ingredientLibrary.entries.find {
