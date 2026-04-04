@@ -1,5 +1,6 @@
 package com.example.ilutomo
 
+import android.content.Intent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -33,18 +34,14 @@ class RecipeAdapter(
         holder.title.text = recipe.title.ifEmpty { "Untitled Dish" }
         holder.category.text = recipe.category
 
-        // Display Calculated Price
-        holder.price.text = "₱${String.format("%.2f", recipe.calculatedPrice)}"
+        // Prices removed from Home main view per previous request, but we keep the field
+        holder.price.visibility = View.GONE
 
-        // FIX: Changed "Kcal" to "Carbs" to match HomeActivity keys
         val p = getMacro(recipe.macros, "Protein")
         val s = getMacro(recipe.macros, "Sugar")
         val c = getMacro(recipe.macros, "Carbs")
-
-        // This will now show: P: 325g | S: 245g | 120g (instead of 0g)
         holder.macros.text = "P: $p | S: $s | C: $c"
 
-        // Handle Image
         val context = holder.itemView.context
         val imageResId = context.resources.getIdentifier(
             recipe.imageResourceName, "drawable", context.packageName
@@ -52,6 +49,13 @@ class RecipeAdapter(
         holder.img.setImageResource(if (imageResId != 0) imageResId else android.R.drawable.ic_menu_gallery)
 
         holder.btnAdd.setOnClickListener { onAddClick(recipe) }
+        
+        // NEW: Click on item to view details
+        holder.itemView.setOnClickListener {
+            val intent = Intent(context, RecipeDetailsActivity::class.java)
+            intent.putExtra("RECIPE", recipe)
+            context.startActivity(intent)
+        }
     }
 
     private fun getMacro(map: Map<String, String>?, key: String): String {

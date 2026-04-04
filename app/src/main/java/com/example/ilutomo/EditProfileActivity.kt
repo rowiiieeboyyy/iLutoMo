@@ -19,34 +19,38 @@ class EditProfileActivity : AppCompatActivity() {
         binding = ActivityEditProfileBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // --- 1. SETUP TOOLBAR & BACK BUTTON ---
-        // This links the Toolbar from your XML to the Activity
         setSupportActionBar(binding.toolbar)
-
-        // This forces the back arrow to appear
         supportActionBar?.apply {
             setDisplayHomeAsUpEnabled(true)
             setDisplayShowHomeEnabled(true)
-            title = "Account Settings" // Sets the title in the bar
+            title = "Account Settings"
         }
 
         val userId = auth.currentUser?.uid
 
-        // 2. Load current name from Firestore
         if (userId != null) {
             db.collection("users").document(userId).get()
                 .addOnSuccessListener { document ->
                     if (document.exists()) {
                         binding.etProfileName.setText(document.getString("name"))
+                        binding.etLat.setText(document.get("latitude")?.toString() ?: "")
+                        binding.etLng.setText(document.get("longitude")?.toString() ?: "")
                     }
                 }
         }
 
-        // 3. Save Changes Logic
         binding.btnUpdateProfile.setOnClickListener {
             val newName = binding.etProfileName.text.toString().trim()
+            val lat = binding.etLat.text.toString().toDoubleOrNull() ?: 0.0
+            val lng = binding.etLng.text.toString().toDoubleOrNull() ?: 0.0
+
             if (newName.isNotEmpty() && userId != null) {
-                db.collection("users").document(userId).update("name", newName)
+                val updates = mapOf(
+                    "name" to newName,
+                    "latitude" to lat,
+                    "longitude" to lng
+                )
+                db.collection("users").document(userId).update(updates)
                     .addOnSuccessListener {
                         Toast.makeText(this, "Profile updated!", Toast.LENGTH_SHORT).show()
                     }
@@ -56,7 +60,6 @@ class EditProfileActivity : AppCompatActivity() {
             }
         }
 
-        // 4. Logout Logic
         binding.btnLogout.setOnClickListener {
             auth.signOut()
             val intent = Intent(this, MainActivity::class.java)
@@ -66,8 +69,6 @@ class EditProfileActivity : AppCompatActivity() {
         }
     }
 
-    // --- 5. HANDLE BACK ARROW CLICK ---
-    // This makes the arrow actually go back when clicked
     override fun onSupportNavigateUp(): Boolean {
         onBackPressedDispatcher.onBackPressed()
         return true

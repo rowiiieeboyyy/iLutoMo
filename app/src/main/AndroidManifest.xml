@@ -32,7 +32,9 @@
         <activity android:name=".DiaryActivity" android:exported="false" />
         <activity android:name=".EditDiaryActivity" android:exported="false" />
 
+        <activity android:name=".RecipeDetailsActivity" android:exported="false" />
         <activity android:name=".OrderConfirmationActivity" android:exported="false" />
+
         <activity android:name=".BusinessDashboardActivity" android:exported="false" />
         <activity android:name=".BusinessInventoryActivity" android:exported="false" />
         <activity android:name=".BusinessOrdersActivity" android:exported="false" />

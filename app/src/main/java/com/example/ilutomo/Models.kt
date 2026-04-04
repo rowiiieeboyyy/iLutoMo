@@ -1,20 +1,21 @@
 package com.example.ilutomo
 
 import com.google.firebase.database.IgnoreExtraProperties
+import java.io.Serializable
 
 @IgnoreExtraProperties
 data class Recipe(
     var id: String = "",
     var title: String = "",
+    var description: String = "",
     var category: String = "",
     var imageResourceName: String = "",
     var ingredients: Map<String, Any>? = emptyMap(),
     var allergens: List<String>? = emptyList(),
-    // Macros stored as "Protein" -> "25g", "Kcal" -> "300", etc.
     var macros: Map<String, String>? = emptyMap(),
     var steps: List<String>? = emptyList(),
     var calculatedPrice: Double = 0.0
-)
+) : Serializable
 
 data class DisplayIngredient(
     val name: String,
@@ -29,8 +30,11 @@ data class PantryIngredient(
     var amount: String = "",
     var price: Double = 0.0,
     var recipeTitle: String = "",
-    var isChecked: Boolean = true
-)
+    var isChecked: Boolean = true,
+    var brandName: String = "",
+    var size: String = "",
+    var businessName: String = ""
+) : Serializable
 
 @IgnoreExtraProperties
 data class Order(
@@ -38,5 +42,7 @@ data class Order(
     var timestamp: Long = 0,
     var items: List<PantryIngredient> = emptyList(),
     var totalAmount: Double = 0.0,
-    var status: String = "Pending"
-)
+    var status: String = "Pending",
+    var businessName: String = "",
+    var pickupAddress: String = ""
+) : Serializable
