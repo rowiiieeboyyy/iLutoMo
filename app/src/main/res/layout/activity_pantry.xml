@@ -17,6 +17,18 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
+    <Button
+        android:id="@+id/btnClearPantry"
+        style="@style/Widget.MaterialComponents.Button.TextButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Clear All"
+        android:textColor="#F44336"
+        android:layout_marginEnd="16dp"
+        app:layout_constraintTop_toTopOf="@id/tvPantryTitle"
+        app:layout_constraintBottom_toBottomOf="@id/tvPantryTitle"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <View
         android:id="@+id/pantryDivider"
         android:layout_width="match_parent"

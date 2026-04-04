@@ -52,6 +52,8 @@ class BusinessProfileActivity : AppCompatActivity() {
         binding.etBusinessName.isEnabled = editing
         binding.etBusinessAddress.isEnabled = editing
         binding.etBusinessPhone.isEnabled = editing
+        binding.etBusinessLat.isEnabled = editing
+        binding.etBusinessLng.isEnabled = editing
         
         binding.btnEditProfile.visibility = if (editing) View.GONE else View.VISIBLE
         binding.btnSaveProfile.visibility = if (editing) View.VISIBLE else View.GONE
@@ -60,7 +62,6 @@ class BusinessProfileActivity : AppCompatActivity() {
     private fun loadProfile() {
         val uid = auth.currentUser?.uid ?: return
         
-        // First, get the business name linked to this user from Firestore
         firestore.collection("users").document(uid).get()
             .addOnSuccessListener { document ->
                 if (document.exists()) {
@@ -68,15 +69,15 @@ class BusinessProfileActivity : AppCompatActivity() {
                     currentBusinessName = bizName
                     
                     if (!bizName.isNullOrEmpty()) {
-                        // Now load details from Realtime Database under "Businesses/[BusinessName]"
                         realtimeDb.child("Businesses").child(bizName).child("details")
                             .get().addOnSuccessListener { snapshot ->
                                 if (snapshot.exists()) {
                                     binding.etBusinessName.setText(bizName)
                                     binding.etBusinessAddress.setText(snapshot.child("address").value?.toString() ?: "")
                                     binding.etBusinessPhone.setText(snapshot.child("phone").value?.toString() ?: "")
+                                    binding.etBusinessLat.setText(snapshot.child("latitude").value?.toString() ?: "")
+                                    binding.etBusinessLng.setText(snapshot.child("longitude").value?.toString() ?: "")
                                 } else {
-                                    // Fallback if details don't exist in RTDB yet but name is in Firestore
                                     binding.etBusinessName.setText(bizName)
                                 }
                             }
@@ -93,6 +94,8 @@ class BusinessProfileActivity : AppCompatActivity() {
         val newName = binding.etBusinessName.text.toString().trim()
         val address = binding.etBusinessAddress.text.toString().trim()
         val phone = binding.etBusinessPhone.text.toString().trim()
+        val lat = binding.etBusinessLat.text.toString().toDoubleOrNull() ?: 0.0
+        val lng = binding.etBusinessLng.text.toString().toDoubleOrNull() ?: 0.0
 
         if (newName.isEmpty() || address.isEmpty() || phone.isEmpty()) {
             Toast.makeText(this, "All fields are required", Toast.LENGTH_SHORT).show()
@@ -101,13 +104,13 @@ class BusinessProfileActivity : AppCompatActivity() {
 
         val details = mapOf(
             "address" to address,
-            "phone" to phone
+            "phone" to phone,
+            "latitude" to lat,
+            "longitude" to lng
         )
 
-        // 1. Update/Set the business name in Firestore for this user
         firestore.collection("users").document(uid).update("businessName", newName)
             .addOnSuccessListener {
-                // 2. Save details in Realtime Database under "Businesses/[BusinessName]"
                 realtimeDb.child("Businesses").child(newName).child("details").setValue(details)
                     .addOnSuccessListener {
                         currentBusinessName = newName
@@ -119,7 +122,6 @@ class BusinessProfileActivity : AppCompatActivity() {
                     }
             }
             .addOnFailureListener {
-                // If update fails (doc might not have the field yet), use set with merge
                 firestore.collection("users").document(uid).set(mapOf("businessName" to newName), com.google.firebase.firestore.SetOptions.merge())
                     .addOnSuccessListener {
                         realtimeDb.child("Businesses").child(newName).child("details").setValue(details)

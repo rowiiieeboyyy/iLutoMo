@@ -20,78 +20,73 @@
                 android:id="@+id/tvOrderId"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Order #123"
+                android:text="Order #123456"
                 android:textStyle="bold"
-                android:textColor="#1B3022"/>
+                android:textColor="#1B3022"
+                android:textSize="16sp"/>
             <TextView
-                android:id="@+id/tvOrderStatus"
+                android:id="@+id/tvOrderDate"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_alignParentEnd="true"
-                android:text="Pending"
-                android:textColor="#FF9800"
-                android:textStyle="bold"/>
+                android:text="Oct 26, 14:30"
+                android:textSize="12sp"/>
         </RelativeLayout>
 
         <TextView
-            android:id="@+id/tvOrderDate"
+            android:id="@+id/tvOrderStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Date: Oct 26, 2023"
-            android:textSize="12sp"
-            android:layout_marginTop="4dp"/>
+            android:layout_marginTop="4dp"
+            android:text="Status: Pending"
+            android:textColor="#2E5A27"
+            android:textStyle="bold"
+            android:textSize="14sp"/>
 
         <TextView
-            android:id="@+id/tvOrderPickup"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Pickup at: Business Name\nAddress"
-            android:textSize="12sp"
-            android:textColor="#2E5A27"
-            android:visibility="gone"/>
+            android:layout_marginTop="8dp"
+            android:text="Items:"
+            android:textStyle="bold"
+            android:textSize="13sp"/>
 
         <TextView
             android:id="@+id/tvOrderDetails"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Items: Garlic, Chicken..."
-            android:textSize="13sp"/>
+            android:layout_marginTop="2dp"
+            android:text="Item 1\nItem 2"
+            android:textSize="13sp"
+            android:textColor="#333333"/>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="8dp"
-            android:gravity="center_vertical">
+            android:layout_marginTop="12dp"
+            android:gravity="end">
 
             <Button
-                android:id="@+id/btnCancelOrder"
+                android:id="@+id/btnAcceptOrder"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:text="Cancel Order"
+                android:layout_height="40dp"
+                android:text="Accept Order"
                 android:textAllCaps="false"
-                android:textSize="12sp"
-                android:backgroundTint="#FF5252"
+                android:backgroundTint="#2E5A27"
                 android:textColor="#FFFFFF"
-                android:paddingLeft="12dp"
-                android:paddingRight="12dp"
-                app:cornerRadius="4dp"
-                android:visibility="gone"/>
+                style="@style/Widget.MaterialComponents.Button.UnelevatedButton"/>
 
-            <View
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:layout_weight="1"/>
-
-            <TextView
-                android:id="@+id/tvOrderTotal"
+            <Button
+                android:id="@+id/btnCompleteOrder"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Total: ₱150.00"
-                android:textStyle="bold"
-                android:textColor="#000000"/>
+                android:layout_height="40dp"
+                android:text="Ready for Pickup"
+                android:textAllCaps="false"
+                android:backgroundTint="#2E5A27"
+                android:textColor="#FFFFFF"
+                style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
+                android:visibility="gone"/>
         </LinearLayout>
 
     </LinearLayout>

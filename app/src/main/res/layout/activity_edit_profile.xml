@@ -38,7 +38,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="30dp"
-        android:layout_marginTop="40dp"
+        android:layout_marginTop="20dp"
         android:hint="Full Name"
         app:boxStrokeColor="#2D5A27"
         app:hintTextColor="#2D5A27"
@@ -51,6 +51,60 @@
             android:inputType="textPersonName" />
     </com.google.android.material.textfield.TextInputLayout>
 
+    <TextView
+        android:id="@+id/tvLocationLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="30dp"
+        android:layout_marginTop="16dp"
+        android:text="Your Location (Coordinates)"
+        android:textColor="#2D5A27"
+        android:textStyle="bold"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tilName" />
+
+    <LinearLayout
+        android:id="@+id/llLocation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="30dp"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal"
+        app:layout_constraintTop_toBottomOf="@id/tvLocationLabel">
+
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:hint="Lat"
+            app:boxStrokeColor="#2D5A27"
+            app:hintTextColor="#2D5A27">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etLat"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="numberDecimal|numberSigned" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:hint="Lng"
+            app:boxStrokeColor="#2D5A27"
+            app:hintTextColor="#2D5A27">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etLng"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="numberDecimal|numberSigned" />
+        </com.google.android.material.textfield.TextInputLayout>
+    </LinearLayout>
+
     <Button
         android:id="@+id/btnUpdateProfile"
         android:layout_width="match_parent"
@@ -61,7 +115,7 @@
         android:text="Save Changes"
         android:textColor="#FFFFFF"
         app:cornerRadius="12dp"
-        app:layout_constraintTop_toBottomOf="@id/tilName" />
+        app:layout_constraintTop_toBottomOf="@id/llLocation" />
 
     <Button
         android:id="@+id/btnLogout"

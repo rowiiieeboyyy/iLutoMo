@@ -94,6 +94,7 @@ class OrdersActivity : AppCompatActivity() {
             val tvDate: TextView = view.findViewById(R.id.tvOrderDate)
             val tvDetails: TextView = view.findViewById(R.id.tvOrderDetails)
             val tvTotal: TextView = view.findViewById(R.id.tvOrderTotal)
+            val tvPickup: TextView? = view.findViewById(R.id.tvOrderPickup)
             val btnCancel: Button = view.findViewById(R.id.btnCancelOrder)
         }
 
@@ -104,22 +105,33 @@ class OrdersActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val order = orders[position]
+            val context = holder.itemView.context
+            
             holder.tvId.text = "Order #${order.id.takeLast(6)}"
             holder.tvStatus.text = order.status
             
             val sdf = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
             holder.tvDate.text = "Date: ${sdf.format(Date(order.timestamp))}"
             
-            val itemsSummary = order.items.joinToString(", ") { it.name }
+            val itemsSummary = order.items.joinToString(", ") { it.brandName.ifEmpty { it.name } }
             holder.tvDetails.text = "Items: $itemsSummary"
             holder.tvTotal.text = String.format(Locale.US, "Total: ₱%.2f", order.totalAmount)
+            
+            holder.tvPickup?.text = "Pickup at: ${order.businessName}\n${order.pickupAddress}"
+            holder.tvPickup?.visibility = if (order.pickupAddress.isNotEmpty()) View.VISIBLE else View.GONE
 
-            // Show cancel button only if status is Pending
             if (order.status == "Pending") {
                 holder.btnCancel.visibility = View.VISIBLE
                 holder.btnCancel.setOnClickListener { onCancelClick(order) }
             } else {
                 holder.btnCancel.visibility = View.GONE
+            }
+
+            // Click to view Order Confirmation
+            holder.itemView.setOnClickListener {
+                val intent = Intent(context, OrderConfirmationActivity::class.java)
+                intent.putExtra("ORDER_ID", order.id)
+                context.startActivity(intent)
             }
         }
 

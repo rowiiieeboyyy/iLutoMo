@@ -66,41 +66,13 @@
                 android:textSize="20sp"
                 android:textStyle="bold" />
 
+            <!-- Dynamic Items Container -->
             <LinearLayout
+                android:id="@+id/llOrderItemsContainer"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:orientation="horizontal"
-                android:weightSum="2">
-
-                <androidx.cardview.widget.CardView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_margin="4dp"
-                    android:layout_weight="1"
-                    app:cardCornerRadius="8dp">
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Main Dish" android:background="#E0E0E0" android:textSize="10sp" android:paddingHorizontal="4dp"/>
-                        <View android:layout_width="match_parent" android:layout_height="100dp" android:layout_marginTop="4dp" android:background="#F5F5F5"/>
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Chimken adobo" android:layout_marginTop="4dp" android:textSize="12sp"/>
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="50,000" android:textStyle="bold" android:textSize="16sp"/>
-                    </LinearLayout>
-                </androidx.cardview.widget.CardView>
-
-                <androidx.cardview.widget.CardView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_margin="4dp"
-                    android:layout_weight="1"
-                    app:cardCornerRadius="8dp">
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Drink" android:background="#E0E0E0" android:textSize="10sp" android:paddingHorizontal="4dp"/>
-                        <View android:layout_width="match_parent" android:layout_height="100dp" android:layout_marginTop="4dp" android:background="#F5F5F5"/>
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Mountain Dew" android:layout_marginTop="4dp" android:textSize="12sp"/>
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="50,500" android:textStyle="bold" android:textSize="16sp"/>
-                    </LinearLayout>
-                </androidx.cardview.widget.CardView>
-            </LinearLayout>
+                android:orientation="vertical" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -109,14 +81,15 @@
                 android:orientation="horizontal"
                 android:weightSum="2">
                 <Button android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Contact Support" android:textAllCaps="false" android:textColor="#000000" android:backgroundTint="#FFFFFF" android:layout_marginEnd="4dp" style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
-                <Button android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Refresh Status" android:textAllCaps="false" android:backgroundTint="#2E5A27"/>
+                <Button android:id="@+id/btnRefreshStatus" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Refresh Status" android:textAllCaps="false" android:backgroundTint="#2E5A27"/>
             </LinearLayout>
 
             <TextView
+                android:id="@+id/tvOrderStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="20dp"
-                android:text="Pickup Instructions\nOrder Status : Preparing Ingredients"
+                android:text="Pickup Instructions\nOrder Status : Pending"
                 android:textColor="#2E5A27"
                 android:textSize="18sp"
                 android:textStyle="bold" />
@@ -131,8 +104,8 @@
             <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp">
                 <ImageView android:id="@+id/order_loc_icon" android:layout_width="32dp" android:layout_height="32dp" android:src="@android:drawable/ic_menu_mylocation" android:padding="4dp" android:background="#F0F0F0"/>
                 <TextView android:id="@+id/order_loc_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_toEndOf="@id/order_loc_icon" android:layout_marginStart="8dp" android:text="Pickup Location" android:textStyle="bold"/>
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_below="@id/order_loc_label" android:layout_toEndOf="@id/order_loc_icon" android:layout_marginStart="8dp" android:text="123 Main Street" android:textColor="#9E9E9E" android:textSize="12sp"/>
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:gravity="end" android:text="Pick up\nbetween 5:00\nPM - 6:00 PM" android:textStyle="bold" android:textSize="12sp"/>
+                <TextView android:id="@+id/tvPickupAddress" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_below="@id/order_loc_label" android:layout_toEndOf="@id/order_loc_icon" android:layout_marginStart="8dp" android:text="Loading address..." android:textColor="#9E9E9E" android:textSize="12sp"/>
+                <TextView android:id="@+id/tvPickupTime" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:gravity="end" android:text="Pick up\nbetween 5:00\nPM - 6:00 PM" android:textStyle="bold" android:textSize="12sp"/>
             </RelativeLayout>
 
             <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp">
