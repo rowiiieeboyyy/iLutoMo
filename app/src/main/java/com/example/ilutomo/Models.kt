@@ -39,6 +39,7 @@ data class PantryIngredient(
 @IgnoreExtraProperties
 data class Order(
     var id: String = "",
+    var userId: String = "", // ADDED THIS: Required for Business-to-User updates
     var timestamp: Long = 0,
     var items: List<PantryIngredient> = emptyList(),
     var totalAmount: Double = 0.0,

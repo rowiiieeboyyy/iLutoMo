@@ -61,12 +61,15 @@ class BusinessOrdersActivity : AppCompatActivity() {
 
     private fun loadOrders() {
         val biz = businessName ?: return
-        database.child("Orders").addValueEventListener(object : ValueEventListener {
+
+        // POINTING TO THE CORRECT SHARED NODE
+        database.child("BusinessOrders").child(biz).addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 orderList.clear()
                 for (child in snapshot.children) {
                     val order = child.getValue(Order::class.java)
-                    if (order != null && order.businessName == biz) {
+                    if (order != null) {
+                        if (order.id.isEmpty()) order.id = child.key ?: ""
                         orderList.add(order)
                     }
                 }
@@ -74,16 +77,21 @@ class BusinessOrdersActivity : AppCompatActivity() {
                 adapter.notifyDataSetChanged()
                 binding.tvNoOrders.visibility = if (orderList.isEmpty()) View.VISIBLE else View.GONE
             }
-
             override fun onCancelled(error: DatabaseError) {}
         })
     }
 
     private fun updateOrderStatus(order: Order, status: String) {
-        database.child("Orders").child(order.id).child("status").setValue(status)
-            .addOnSuccessListener {
-                Toast.makeText(this, "Order updated to $status", Toast.LENGTH_SHORT).show()
-            }
+        val biz = businessName ?: return
+        val updates = HashMap<String, Any?>()
+
+        // Update both the Business inbox and the User's private folder
+        updates["BusinessOrders/$biz/${order.id}/status"] = status
+        updates["Users/${order.userId}/MyOrders/${order.id}/status"] = status
+
+        database.updateChildren(updates).addOnSuccessListener {
+            Toast.makeText(this, "Order updated to $status", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun setupBottomNavigation() {
@@ -121,13 +129,13 @@ class BusinessOrdersActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val order = orders[position]
-            holder.tvId.text = "Order #${order.id.takeLast(6)}"
+            holder.tvId.text = "Order #${order.id.takeLast(6).uppercase()}"
             holder.tvStatus.text = "Status: ${order.status}"
             val sdf = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
             holder.tvDate.text = sdf.format(Date(order.timestamp))
-            
-            val details = order.items.joinToString("\n") { 
-                "${it.brandName.ifEmpty { it.name }} (${it.size.ifEmpty { it.amount }})"
+
+            val details = order.items.joinToString("\n") {
+                "• ${it.brandName.ifEmpty { it.name }} (${it.size.ifEmpty { it.amount }})"
             }
             holder.tvDetails.text = details
 

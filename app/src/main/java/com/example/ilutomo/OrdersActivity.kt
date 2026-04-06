@@ -50,7 +50,7 @@ class OrdersActivity : AppCompatActivity() {
     private fun loadOrders() {
         val uid = auth.currentUser?.uid ?: return
 
-        // ANTI-BLEED: Pointing to private user node
+        // FIXED PATH: Pointing to private user node to prevent data bleed
         database.child("Users").child(uid).child("MyOrders")
             .addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
@@ -58,12 +58,14 @@ class OrdersActivity : AppCompatActivity() {
                     for (child in snapshot.children) {
                         val order = child.getValue(Order::class.java)
                         if (order != null) {
-                            // Sync the ID from the Firebase key if empty
+                            // Sync the ID from the Firebase key if the object field is empty
                             if (order.id.isEmpty()) order.id = child.key ?: ""
                             orderList.add(order)
                         }
                     }
+                    // Sort by timestamp so the newest orders appear first
                     orderList.sortByDescending { it.timestamp }
+
                     rvOrders.adapter = OrdersAdapter(orderList) { order ->
                         showCancelConfirmation(order)
                     }
@@ -81,6 +83,7 @@ class OrdersActivity : AppCompatActivity() {
             .setTitle("Cancel Order")
             .setMessage("Are you sure you want to cancel this order?")
             .setPositiveButton("Yes") { _, _ ->
+                // FIXED: Delete from the private user folder
                 database.child("Users").child(uid).child("MyOrders").child(order.id).removeValue()
                     .addOnSuccessListener {
                         Toast.makeText(this, "Order cancelled successfully", Toast.LENGTH_SHORT).show()
@@ -90,6 +93,7 @@ class OrdersActivity : AppCompatActivity() {
             .show()
     }
 
+    // Inner Adapter Class
     class OrdersAdapter(
         private val orders: List<Order>,
         private val onCancelClick: (Order) -> Unit
@@ -114,24 +118,25 @@ class OrdersActivity : AppCompatActivity() {
             val order = orders[position]
             val context = holder.itemView.context
 
+            // UI Formatting
             holder.tvId.text = "Order #${order.id.takeLast(6).uppercase()}"
             holder.tvStatus.text = "Status: ${order.status}"
 
             val sdf = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
             holder.tvDate.text = "Date: ${sdf.format(Date(order.timestamp))}"
 
-            // FIXED SYNTAX: This handles empty brand names safely
+            // Format item list for the summary text
             val itemsSummary = order.items.joinToString(", ") { item ->
                 if (item.brandName.isNotEmpty()) item.brandName else item.name
             }
             holder.tvDetails.text = "Items: $itemsSummary"
 
-            // Check your Order model for totalAmount or price calculation
             holder.tvTotal.text = String.format(Locale.US, "Total: ₱%.2f", order.totalAmount)
 
             holder.tvPickup?.text = "Pickup at: ${order.businessName}\n${order.pickupAddress}"
             holder.tvPickup?.visibility = if (order.pickupAddress.isNotEmpty()) View.VISIBLE else View.GONE
 
+            // Only show cancel button for Pending orders
             if (order.status == "Pending") {
                 holder.btnCancel.visibility = View.VISIBLE
                 holder.btnCancel.setOnClickListener { onCancelClick(order) }
@@ -139,6 +144,7 @@ class OrdersActivity : AppCompatActivity() {
                 holder.btnCancel.visibility = View.GONE
             }
 
+            // Click listener to view specific order details
             holder.itemView.setOnClickListener {
                 val intent = Intent(context, OrderConfirmationActivity::class.java)
                 intent.putExtra("ORDER_ID", order.id)
