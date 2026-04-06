@@ -19,7 +19,7 @@ class HomeActivity : AppCompatActivity() {
     private val database = FirebaseDatabase.getInstance().reference
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
-    
+
     private val allRecipes = mutableListOf<Recipe>()
     private val filteredList = mutableListOf<Recipe>()
     private val inventoryMap = mutableMapOf<String, MutableList<InventoryItem>>()
@@ -31,8 +31,8 @@ class HomeActivity : AppCompatActivity() {
     private var searchQuery = ""
     private var userLat: Double = 0.0
     private var userLng: Double = 0.0
-
-    private var bMin = 0; private var bMax = 10000
+    private var bMin = 0
+    private var bMax = 10000
 
     data class BusinessLocation(val lat: Double, val lng: Double, var distance: Double = 0.0)
 
@@ -42,8 +42,7 @@ class HomeActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.ivHomeProfile.setOnClickListener {
-            val intent = Intent(this, EditProfileActivity::class.java)
-            startActivity(intent)
+            startActivity(Intent(this, EditProfileActivity::class.java))
         }
 
         setupRecyclerView()
@@ -71,9 +70,7 @@ class HomeActivity : AppCompatActivity() {
                 userLng = document.getDouble("longitude") ?: 0.0
                 loadBusinessData()
             }
-            .addOnFailureListener {
-                loadBusinessData()
-            }
+            .addOnFailureListener { loadBusinessData() }
     }
 
     private fun loadBusinessData() {
@@ -86,23 +83,18 @@ class HomeActivity : AppCompatActivity() {
                     val details = businessSnapshot.child("details")
                     val lat = details.child("latitude").value?.toString()?.toDoubleOrNull() ?: 0.0
                     val lng = details.child("longitude").value?.toString()?.toDoubleOrNull() ?: 0.0
-                    
+
                     val distance = calculateDistance(userLat, userLng, lat, lng)
                     businessDetailsMap[businessName] = BusinessLocation(lat, lng, distance)
 
-                    val inventorySnapshot = businessSnapshot.child("inventory")
                     val items = mutableListOf<InventoryItem>()
-                    for (itemSnapshot in inventorySnapshot.children) {
-                        val item = itemSnapshot.getValue(InventoryItem::class.java)
-                        if (item != null) {
-                            items.add(item)
-                        }
+                    for (itemSnapshot in businessSnapshot.child("inventory").children) {
+                        itemSnapshot.getValue(InventoryItem::class.java)?.let { items.add(it) }
                     }
                     inventoryMap[businessName] = items
                 }
                 fetchPreferences()
             }
-
             override fun onCancelled(error: DatabaseError) {}
         })
     }
@@ -114,8 +106,7 @@ class HomeActivity : AppCompatActivity() {
         val a = sin(dLat / 2) * sin(dLat / 2) +
                 cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
                 sin(dLon / 2) * sin(dLon / 2)
-        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        return r * c
+        return r * (2 * atan2(sqrt(a), sqrt(1 - a)))
     }
 
     private fun setupSearch() {
@@ -136,18 +127,19 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun fetchPreferences() {
-        database.child("UserPreferences").addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(s: DataSnapshot) {
-                if (s.exists()) {
-                    userDiet = s.child("dietary_type").value?.toString() ?: "Standard"
-                    val min = s.child("budget_min").value?.toString()?.toDouble()?.toInt() ?: 0
-                    val max = s.child("budget_max").value?.toString()?.toDouble()?.toInt() ?: 10000
-                    bMin = min; bMax = max
+        val uid = auth.currentUser?.uid ?: return
+        database.child("Users").child(uid).child("Preferences")
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(s: DataSnapshot) {
+                    if (s.exists()) {
+                        userDiet = s.child("dietary_type").value?.toString() ?: "Standard"
+                        bMin = s.child("budget_min").value?.toString()?.toDouble()?.toInt() ?: 0
+                        bMax = s.child("budget_max").value?.toString()?.toDouble()?.toInt() ?: 10000
+                    }
+                    loadRecipes()
                 }
-                loadRecipes()
-            }
-            override fun onCancelled(e: DatabaseError) {}
-        })
+                override fun onCancelled(e: DatabaseError) {}
+            })
     }
 
     private fun loadRecipes() {
@@ -155,34 +147,28 @@ class HomeActivity : AppCompatActivity() {
             override fun onDataChange(s: DataSnapshot) {
                 allRecipes.clear()
                 val sortedByDist = businessDetailsMap.entries.sortedBy { it.value.distance }
-                
+
                 for (child in s.children) {
                     if (child.key?.startsWith("recipe_") == true) {
                         val r = child.getValue(Recipe::class.java) ?: continue
                         r.id = child.key!!
-                        
-                        var cal = 0.0; var pro = 0.0; var carb = 0.0; var sug = 0.0; var sod = 0.0
+
+                        var cal = 0.0; var pro = 0.0; var carb = 0.0
                         r.ingredients?.forEach { (name, amt) ->
                             val qty = amt.toString().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0
                             val lib = ingredientLibrary[name]
                             if (lib != null) {
-                                val isPieceBased = name.contains("Egg", true) || name.contains("Wrapper", true) || name.contains("Banana", true)
-                                val factor = if (isPieceBased) qty else (qty / 50.0)
+                                val factor = if (name.contains("Egg", true)) qty else (qty / 50.0)
                                 cal += factor * (lib.child("cal").getValue(Double::class.java) ?: 0.0)
                                 pro += factor * (lib.child("pro").getValue(Double::class.java) ?: 0.0)
                                 carb += factor * (lib.child("carb").getValue(Double::class.java) ?: 0.0)
-                                sug += factor * (lib.child("sugar").getValue(Double::class.java) ?: 0.0)
-                                sod += factor * (lib.child("sodium").getValue(Double::class.java) ?: 0.0)
                             }
                         }
 
-                        // REFINED BUDGET ALGORITHM
-                        // For each ingredient, find the closest business that has it.
-                        // Then, in that specific nearest business, find the absolute cheapest brand/item.
                         var totalPrice = 0.0
                         r.ingredients?.keys?.forEach { ingName ->
                             for (biz in sortedByDist) {
-                                val matches = inventoryMap[biz.key]?.filter { it.ingredient.equals(ingName, ignoreCase = true) }
+                                val matches = inventoryMap[biz.key]?.filter { it.ingredient.equals(ingName, true) }
                                 if (!matches.isNullOrEmpty()) {
                                     totalPrice += matches.minOf { it.price }
                                     break
@@ -190,14 +176,7 @@ class HomeActivity : AppCompatActivity() {
                             }
                         }
                         r.calculatedPrice = totalPrice
-
-                        r.macros = mapOf(
-                            "Calories" to "${cal.toInt()}",
-                            "Protein" to "${pro.toInt()}g",
-                            "Carbs" to "${carb.toInt()}g",
-                            "Sugar" to "${sug.toInt()}g",
-                            "Sodium" to "${sod.toInt()}mg"
-                        )
+                        r.macros = mapOf("Calories" to "${cal.toInt()}", "Protein" to "${pro.toInt()}g", "Carbs" to "${carb.toInt()}g")
                         allRecipes.add(r)
                     }
                 }
@@ -212,29 +191,17 @@ class HomeActivity : AppCompatActivity() {
         val baseFiltered = allRecipes.filter { r ->
             val matchesSearch = r.title.contains(searchQuery, ignoreCase = true)
             val matchesDiet = userDiet == "Standard" || r.category.equals(userDiet, ignoreCase = true)
-            val withinBudget = r.calculatedPrice <= bMax
-            matchesSearch && matchesDiet && withinBudget
+            matchesSearch && matchesDiet && r.calculatedPrice <= bMax
         }
-
-        val fulfilled = baseFiltered.filter { r -> countFoundIngredients(r) == (r.ingredients?.size ?: 0) }
-        val incomplete = baseFiltered.filter { r -> countFoundIngredients(r) < (r.ingredients?.size ?: 0) }
-
-        filteredList.addAll(fulfilled)
-        filteredList.addAll(incomplete)
+        filteredList.addAll(baseFiltered)
         recipeAdapter.notifyDataSetChanged()
     }
 
-    private fun countFoundIngredients(r: Recipe): Int {
-        var count = 0
-        r.ingredients?.keys?.forEach { name ->
-            if (inventoryMap.values.any { items -> items.any { it.ingredient.equals(name, ignoreCase = true) } }) count++
-        }
-        return count
-    }
-
     private fun saveSelection(r: Recipe) {
-        database.child("UserSelection").child(r.title.replace(" ", "_")).setValue(r)
-            .addOnSuccessListener { Toast.makeText(this, "Added to My Recipes!", Toast.LENGTH_SHORT).show() }
+        val uid = auth.currentUser?.uid ?: return
+        database.child("Users").child(uid).child("SelectedRecipes")
+            .child(r.title.replace(" ", "_")).setValue(r)
+            .addOnSuccessListener { Toast.makeText(this, "${r.title} saved!", Toast.LENGTH_SHORT).show() }
     }
 
     private fun setupBottomNavigation() {

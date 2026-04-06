@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.ilutomo">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -25,13 +29,11 @@
         <activity android:name=".PantryActivity" android:exported="false" />
         <activity android:name=".ProfileActivity" android:exported="false" />
         <activity android:name=".OrdersActivity" android:exported="false" />
-
         <activity android:name=".MacrosActivity" android:exported="false" />
         <activity android:name=".CookingStepsActivity" android:exported="false" />
         <activity android:name=".GetIngredientsActivity" android:exported="false" />
         <activity android:name=".DiaryActivity" android:exported="false" />
         <activity android:name=".EditDiaryActivity" android:exported="false" />
-
         <activity android:name=".RecipeDetailsActivity" android:exported="false" />
         <activity android:name=".OrderConfirmationActivity" android:exported="false" />
 
@@ -39,14 +41,19 @@
         <activity android:name=".BusinessInventoryActivity" android:exported="false" />
         <activity android:name=".BusinessOrdersActivity" android:exported="false" />
         <activity android:name=".BusinessManageActivity" android:exported="false" />
-        <activity android:name=".BusinessProfileActivity" android:exported="false" />
+
+        <activity
+            android:name=".BusinessProfileActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustPan" />
 
         <activity
             android:name=".EditProfileActivity"
             android:exported="false"
             android:parentActivityName=".ProfileActivity"
             android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar"
-            android:screenOrientation="portrait">
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustPan">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".ProfileActivity" />

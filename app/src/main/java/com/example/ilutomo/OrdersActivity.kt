@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -21,6 +22,7 @@ class OrdersActivity : AppCompatActivity() {
 
     private lateinit var rvOrders: RecyclerView
     private val database = FirebaseDatabase.getInstance().reference
+    private val auth = FirebaseAuth.getInstance()
     private val orderList = mutableListOf<Order>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,6 +33,7 @@ class OrdersActivity : AppCompatActivity() {
         rvOrders.layoutManager = LinearLayoutManager(this)
 
         val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNav)
+        bottomNav.selectedItemId = R.id.nav_profile
         bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); finish(); true }
@@ -45,38 +48,42 @@ class OrdersActivity : AppCompatActivity() {
     }
 
     private fun loadOrders() {
-        database.child("Orders").addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                orderList.clear()
-                for (child in snapshot.children) {
-                    val order = child.getValue(Order::class.java)
-                    if (order != null) {
-                        orderList.add(order)
+        val uid = auth.currentUser?.uid ?: return
+
+        // ANTI-BLEED: Pointing to private user node
+        database.child("Users").child(uid).child("MyOrders")
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    orderList.clear()
+                    for (child in snapshot.children) {
+                        val order = child.getValue(Order::class.java)
+                        if (order != null) {
+                            // Sync the ID from the Firebase key if empty
+                            if (order.id.isEmpty()) order.id = child.key ?: ""
+                            orderList.add(order)
+                        }
+                    }
+                    orderList.sortByDescending { it.timestamp }
+                    rvOrders.adapter = OrdersAdapter(orderList) { order ->
+                        showCancelConfirmation(order)
                     }
                 }
-                orderList.sortByDescending { it.timestamp }
-                rvOrders.adapter = OrdersAdapter(orderList) { order ->
-                    showCancelConfirmation(order)
-                }
-            }
 
-            override fun onCancelled(error: DatabaseError) {
-                Toast.makeText(this@OrdersActivity, "Error: ${error.message}", Toast.LENGTH_SHORT).show()
-            }
-        })
+                override fun onCancelled(error: DatabaseError) {
+                    Toast.makeText(this@OrdersActivity, "Error: ${error.message}", Toast.LENGTH_SHORT).show()
+                }
+            })
     }
 
     private fun showCancelConfirmation(order: Order) {
+        val uid = auth.currentUser?.uid ?: return
         AlertDialog.Builder(this)
             .setTitle("Cancel Order")
             .setMessage("Are you sure you want to cancel this order?")
             .setPositiveButton("Yes") { _, _ ->
-                database.child("Orders").child(order.id).removeValue()
+                database.child("Users").child(uid).child("MyOrders").child(order.id).removeValue()
                     .addOnSuccessListener {
                         Toast.makeText(this, "Order cancelled successfully", Toast.LENGTH_SHORT).show()
-                    }
-                    .addOnFailureListener {
-                        Toast.makeText(this, "Failed to cancel order: ${it.message}", Toast.LENGTH_SHORT).show()
                     }
             }
             .setNegativeButton("No", null)
@@ -87,7 +94,7 @@ class OrdersActivity : AppCompatActivity() {
         private val orders: List<Order>,
         private val onCancelClick: (Order) -> Unit
     ) : RecyclerView.Adapter<OrdersAdapter.ViewHolder>() {
-        
+
         class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val tvId: TextView = view.findViewById(R.id.tvOrderId)
             val tvStatus: TextView = view.findViewById(R.id.tvOrderStatus)
@@ -106,17 +113,22 @@ class OrdersActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val order = orders[position]
             val context = holder.itemView.context
-            
-            holder.tvId.text = "Order #${order.id.takeLast(6)}"
-            holder.tvStatus.text = order.status
-            
+
+            holder.tvId.text = "Order #${order.id.takeLast(6).uppercase()}"
+            holder.tvStatus.text = "Status: ${order.status}"
+
             val sdf = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
             holder.tvDate.text = "Date: ${sdf.format(Date(order.timestamp))}"
-            
-            val itemsSummary = order.items.joinToString(", ") { it.brandName.ifEmpty { it.name } }
+
+            // FIXED SYNTAX: This handles empty brand names safely
+            val itemsSummary = order.items.joinToString(", ") { item ->
+                if (item.brandName.isNotEmpty()) item.brandName else item.name
+            }
             holder.tvDetails.text = "Items: $itemsSummary"
+
+            // Check your Order model for totalAmount or price calculation
             holder.tvTotal.text = String.format(Locale.US, "Total: ₱%.2f", order.totalAmount)
-            
+
             holder.tvPickup?.text = "Pickup at: ${order.businessName}\n${order.pickupAddress}"
             holder.tvPickup?.visibility = if (order.pickupAddress.isNotEmpty()) View.VISIBLE else View.GONE
 
@@ -127,7 +139,6 @@ class OrdersActivity : AppCompatActivity() {
                 holder.btnCancel.visibility = View.GONE
             }
 
-            // Click to view Order Confirmation
             holder.itemView.setOnClickListener {
                 val intent = Intent(context, OrderConfirmationActivity::class.java)
                 intent.putExtra("ORDER_ID", order.id)

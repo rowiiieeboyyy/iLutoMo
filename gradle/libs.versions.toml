@@ -1,9 +1,10 @@
 [versions]
-# Keep your current Gradle Plugin version
-agp = "9.0.1"
-# Stable Kotlin version
-kotlin = "2.2.10"
-# Use stable versions that don't require API 36
+# FIXED: Downgraded to match your Android Studio support
+agp = "8.7.1"
+# FIXED: Using 1.9.24 for maximum stability with AGP 8.7
+kotlin = "1.9.24"
+googleServices = "4.4.2"
+firebaseBom = "33.1.2"
 coreKtx = "1.13.1"
 junit = "4.13.2"
 junitVersion = "1.2.1"
@@ -23,6 +24,14 @@ material = { group = "com.google.android.material", name = "material", version.r
 androidx-activity = { group = "androidx.activity", name = "activity", version.ref = "activity" }
 androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
 
+# Firebase Libraries
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+firebase-auth = { group = "com.google.firebase", name = "firebase-auth-ktx" }
+firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore-ktx" }
+firebase-database = { group = "com.google.firebase", name = "firebase-database-ktx" }
+firebase-storage = { group = "com.google.firebase", name = "firebase-storage-ktx" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }

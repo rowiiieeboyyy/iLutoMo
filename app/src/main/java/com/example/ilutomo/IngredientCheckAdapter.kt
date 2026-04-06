@@ -18,7 +18,6 @@ class IngredientCheckAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        // Ensure you have a layout file named item_ingredient_check.xml
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_ingredient_check, parent, false)
         return ViewHolder(view)
@@ -26,12 +25,17 @@ class IngredientCheckAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val item = ingredients[position]
+
+        // 1. CLEAR the listener before setting the state to avoid recycling bugs
+        holder.checkBox.setOnCheckedChangeListener(null)
+
         holder.tvName.text = "${item.name} (${item.amount})"
         holder.checkBox.isChecked = item.isChecked
 
+        // 2. SET the listener to update the actual data object
         holder.checkBox.setOnCheckedChangeListener { _, isChecked ->
             item.isChecked = isChecked
-            onCheckChanged()
+            onCheckChanged() // Refreshes the strikethrough/summary in the Activity
         }
     }
 
