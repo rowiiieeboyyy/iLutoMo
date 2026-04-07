@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -36,7 +39,6 @@
         <activity android:name=".EditDiaryActivity" android:exported="false" />
         <activity android:name=".RecipeDetailsActivity" android:exported="false" />
         <activity android:name=".OrderConfirmationActivity" android:exported="false" />
-
         <activity android:name=".BusinessDashboardActivity" android:exported="false" />
         <activity android:name=".BusinessInventoryActivity" android:exported="false" />
         <activity android:name=".BusinessOrdersActivity" android:exported="false" />
@@ -58,6 +60,12 @@
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".ProfileActivity" />
         </activity>
+
+        <service
+            android:name=".LocationService"
+            android:foregroundServiceType="location"
+            android:enabled="true"
+            android:exported="false" />
 
     </application>
 </manifest>

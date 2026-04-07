@@ -33,17 +33,19 @@ data class PantryIngredient(
     var isChecked: Boolean = true,
     var brandName: String = "",
     var size: String = "",
-    var businessName: String = ""
+    var businessName: String = "",
+    var imageUrl: String = "" // Added for store item images
 ) : Serializable
 
 @IgnoreExtraProperties
 data class Order(
     var id: String = "",
-    var userId: String = "", // ADDED THIS: Required for Business-to-User updates
+    var userId: String = "",
     var timestamp: Long = 0,
     var items: List<PantryIngredient> = emptyList(),
     var totalAmount: Double = 0.0,
     var status: String = "Pending",
     var businessName: String = "",
-    var pickupAddress: String = ""
+    var pickupAddress: String = "",
+    var pickupTime: String = "" // Added for editable pickup time
 ) : Serializable

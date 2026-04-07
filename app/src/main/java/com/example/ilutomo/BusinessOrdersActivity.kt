@@ -2,6 +2,7 @@ package com.example.ilutomo
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -15,6 +16,7 @@ import com.example.ilutomo.databinding.ActivityBusinessOrdersBinding
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -27,6 +29,9 @@ class BusinessOrdersActivity : AppCompatActivity() {
     private val orderList = mutableListOf<Order>()
     private lateinit var adapter: BusinessOrdersAdapter
 
+    // To prevent memory leaks and redundant listeners
+    private var locationListener: ListenerRegistration? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityBusinessOrdersBinding.inflate(layoutInflater)
@@ -38,11 +43,50 @@ class BusinessOrdersActivity : AppCompatActivity() {
     }
 
     private fun setupRecyclerView() {
-        adapter = BusinessOrdersAdapter(orderList) { order, newStatus ->
-            updateOrderStatus(order, newStatus)
-        }
+        adapter = BusinessOrdersAdapter(orderList,
+            onStatusUpdate = { order, newStatus -> updateOrderStatus(order, newStatus) },
+            onTrackClick = { order -> startTrackingCustomer(order.userId) }
+        )
         binding.rvBusinessOrders.layoutManager = LinearLayoutManager(this)
         binding.rvBusinessOrders.adapter = adapter
+    }
+
+    // LISTENS TO CUSTOMER GPS IN REAL-TIME
+    private fun startTrackingCustomer(customerUid: String) {
+        if (customerUid.isEmpty()) {
+            Toast.makeText(this, "Cannot track: Customer ID missing", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Remove previous listener before starting a new one
+        locationListener?.remove()
+
+        Toast.makeText(this, "Fetching live location...", Toast.LENGTH_SHORT).show()
+
+        locationListener = firestore.collection("users").document(customerUid)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.e("Tracking", "Listen failed.", e)
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null && snapshot.exists()) {
+                    val lat = snapshot.getDouble("latitude") ?: 0.0
+                    val lng = snapshot.getDouble("longitude") ?: 0.0
+                    val isTracking = snapshot.getBoolean("isTrackingEnabled") ?: false
+
+                    if (isTracking) {
+                        // Displaying the location in the 'No Orders' field as a status bar
+                        binding.tvNoOrders.visibility = View.VISIBLE
+                        binding.tvNoOrders.text = "Tracking Customer: $lat, $lng"
+                        binding.tvNoOrders.setBackgroundColor(getColor(android.R.color.holo_blue_light))
+                    } else {
+                        binding.tvNoOrders.text = "Customer has disabled live tracking."
+                        binding.tvNoOrders.setBackgroundColor(getColor(android.R.color.transparent))
+                        locationListener?.remove()
+                    }
+                }
+            }
     }
 
     private fun fetchBusinessNameAndLoadOrders() {
@@ -53,7 +97,7 @@ class BusinessOrdersActivity : AppCompatActivity() {
                 if (!businessName.isNullOrEmpty()) {
                     loadOrders()
                 } else {
-                    binding.tvNoOrders.text = "Set Business Name in Profile first"
+                    binding.tvNoOrders.text = "Please set Business Name in Profile"
                     binding.tvNoOrders.visibility = View.VISIBLE
                 }
             }
@@ -61,8 +105,6 @@ class BusinessOrdersActivity : AppCompatActivity() {
 
     private fun loadOrders() {
         val biz = businessName ?: return
-
-        // POINTING TO THE CORRECT SHARED NODE
         database.child("BusinessOrders").child(biz).addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 orderList.clear()
@@ -75,7 +117,14 @@ class BusinessOrdersActivity : AppCompatActivity() {
                 }
                 orderList.sortByDescending { it.timestamp }
                 adapter.notifyDataSetChanged()
-                binding.tvNoOrders.visibility = if (orderList.isEmpty()) View.VISIBLE else View.GONE
+
+                // Only show "No Orders" text if we aren't currently tracking someone
+                if (orderList.isEmpty()) {
+                    binding.tvNoOrders.text = "No active orders for $biz"
+                    binding.tvNoOrders.visibility = View.VISIBLE
+                } else if (locationListener == null) {
+                    binding.tvNoOrders.visibility = View.GONE
+                }
             }
             override fun onCancelled(error: DatabaseError) {}
         })
@@ -84,13 +133,11 @@ class BusinessOrdersActivity : AppCompatActivity() {
     private fun updateOrderStatus(order: Order, status: String) {
         val biz = businessName ?: return
         val updates = HashMap<String, Any?>()
-
-        // Update both the Business inbox and the User's private folder
         updates["BusinessOrders/$biz/${order.id}/status"] = status
         updates["Users/${order.userId}/MyOrders/${order.id}/status"] = status
 
         database.updateChildren(updates).addOnSuccessListener {
-            Toast.makeText(this, "Order updated to $status", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Order marked as $status", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -108,9 +155,16 @@ class BusinessOrdersActivity : AppCompatActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        locationListener?.remove()
+    }
+
+    // --- ADAPTER ---
     class BusinessOrdersAdapter(
         private val orders: List<Order>,
-        private val onStatusUpdate: (Order, String) -> Unit
+        private val onStatusUpdate: (Order, String) -> Unit,
+        private val onTrackClick: (Order) -> Unit
     ) : RecyclerView.Adapter<BusinessOrdersAdapter.ViewHolder>() {
 
         class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -120,6 +174,7 @@ class BusinessOrdersActivity : AppCompatActivity() {
             val tvDetails: TextView = view.findViewById(R.id.tvOrderDetails)
             val btnAccept: Button = view.findViewById(R.id.btnAcceptOrder)
             val btnComplete: Button = view.findViewById(R.id.btnCompleteOrder)
+            val btnTrack: Button = view.findViewById(R.id.btnTrackCustomer)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -134,10 +189,11 @@ class BusinessOrdersActivity : AppCompatActivity() {
             val sdf = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
             holder.tvDate.text = sdf.format(Date(order.timestamp))
 
-            val details = order.items.joinToString("\n") {
+            holder.tvDetails.text = order.items.joinToString("\n") {
                 "• ${it.brandName.ifEmpty { it.name }} (${it.size.ifEmpty { it.amount }})"
             }
-            holder.tvDetails.text = details
+
+            holder.btnTrack.setOnClickListener { onTrackClick(order) }
 
             when (order.status) {
                 "Pending" -> {

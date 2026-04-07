@@ -3,13 +3,14 @@ package com.example.ilutomo
 import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
-import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
+import java.text.SimpleDateFormat
+import java.util.*
 
 class PantryActivity : AppCompatActivity() {
 
@@ -35,27 +36,53 @@ class PantryActivity : AppCompatActivity() {
 
         setupNavigation()
 
-        btnGetIngredient.setOnClickListener { processCheckout() }
+        // Clicking "Get Ingredients" opens the store list immediately
+        btnGetIngredient.setOnClickListener { fetchStoresAndShowDialog() }
         btnClearPantry.setOnClickListener { showClearPantryConfirmation() }
 
         loadPantryIngredients()
     }
 
-    private fun processCheckout() {
-        val uid = auth.currentUser?.uid ?: return
+    private fun fetchStoresAndShowDialog() {
         val selectedItems = pantryIngredients.filter { it.isChecked }
-
         if (selectedItems.isEmpty()) {
             Toast.makeText(this, "Select items first!", Toast.LENGTH_SHORT).show()
             return
         }
 
-        // FIX: Extract the business name from the selected items
-        val businessName = selectedItems[0].businessName.ifEmpty { "SM Supermarket Aura" }
+        database.child("Businesses").addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val storeNames = mutableListOf<String>()
+                for (bizSnapshot in snapshot.children) {
+                    bizSnapshot.key?.let { storeNames.add(it) }
+                }
 
-        // Generate a unique ID for the order
+                if (storeNames.isEmpty()) {
+                    Toast.makeText(this@PantryActivity, "No stores available", Toast.LENGTH_SHORT).show()
+                } else {
+                    val builder = AlertDialog.Builder(this@PantryActivity)
+                    builder.setTitle("Select Store to Place Order")
+                    builder.setItems(storeNames.toTypedArray()) { _, which ->
+                        // ONE-TAP: Selecting the store creates the order immediately
+                        processCheckout(storeNames[which], selectedItems)
+                    }
+                    builder.setNegativeButton("Cancel", null)
+                    builder.show()
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        })
+    }
+
+    private fun processCheckout(businessName: String, selectedItems: List<PantryIngredient>) {
+        val uid = auth.currentUser?.uid ?: return
         val orderRef = database.child("BusinessOrders").child(businessName).push()
         val orderId = orderRef.key ?: return
+
+        // Default pickup time (can be edited in the next screen)
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.MINUTE, 30)
+        val defaultTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(calendar.time)
 
         val orderData = Order(
             id = orderId,
@@ -65,21 +92,23 @@ class PantryActivity : AppCompatActivity() {
             totalAmount = selectedItems.sumOf { it.price },
             status = "Pending",
             businessName = businessName,
-            pickupAddress = "Teresa, Rizal"
+            pickupAddress = "Teresa, Rizal",
+            pickupTime = defaultTime
         )
 
-        // DOUBLE-SAVE: Send to both the User folder and the Business Inbox
         val updates = HashMap<String, Any?>()
         updates["BusinessOrders/$businessName/$orderId"] = orderData
         updates["Users/$uid/MyOrders/$orderId"] = orderData
 
         database.updateChildren(updates).addOnSuccessListener {
-            Toast.makeText(this, "Order placed successfully!", Toast.LENGTH_SHORT).show()
+            // Clear checked ingredients from Pantry
+            val pantryRef = database.child("Users").child(uid).child("Pantry")
+            selectedItems.forEach { item -> pantryRef.child(item.id).removeValue() }
+
+            // Proceed straight to tracking
             val intent = Intent(this, OrderConfirmationActivity::class.java)
             intent.putExtra("ORDER_ID", orderId)
             startActivity(intent)
-        }.addOnFailureListener {
-            Toast.makeText(this, "Checkout failed: ${it.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -104,16 +133,24 @@ class PantryActivity : AppCompatActivity() {
     private fun updateUI(groupedMap: Map<String, List<PantryIngredient>>) {
         llPantryList.removeAllViews()
         for ((title, items) in groupedMap) {
-            val tv = TextView(this).apply { text = title; textSize = 18f; setTypeface(null, Typeface.BOLD); setPadding(0, 20, 0, 10) }
+            val tv = TextView(this).apply {
+                text = title; textSize = 18f; setTypeface(null, Typeface.BOLD); setPadding(0, 20, 0, 10)
+            }
             llPantryList.addView(tv)
             for (ing in items) {
                 val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 10, 0, 10) }
                 val cb = CheckBox(this).apply {
                     isChecked = ing.isChecked
-                    setOnCheckedChangeListener { _, isChecked -> ing.isChecked = isChecked; updateOrderSummary() }
+                    setOnCheckedChangeListener { _, isChecked ->
+                        ing.isChecked = isChecked
+                        updateOrderSummary()
+                    }
                 }
                 row.addView(cb)
-                row.addView(TextView(this).apply { text = "${ing.name} (${ing.amount})"; layoutParams = LinearLayout.LayoutParams(0, -2, 1f) })
+                row.addView(TextView(this).apply {
+                    text = "${ing.name} (${ing.amount})"
+                    layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+                })
                 llPantryList.addView(row)
             }
         }
@@ -149,8 +186,10 @@ class PantryActivity : AppCompatActivity() {
 
     private fun showClearPantryConfirmation() {
         val uid = auth.currentUser?.uid ?: return
-        AlertDialog.Builder(this).setTitle("Clear Pantry?").setPositiveButton("Yes") { _, _ ->
-            database.child("Users").child(uid).child("Pantry").removeValue()
-        }.setNegativeButton("No", null).show()
+        AlertDialog.Builder(this)
+            .setTitle("Clear Pantry?")
+            .setMessage("Do you want to remove all items?")
+            .setPositiveButton("Yes") { _, _ -> database.child("Users").child(uid).child("Pantry").removeValue() }
+            .setNegativeButton("No", null).show()
     }
 }
