@@ -22,7 +22,6 @@ class EditProfileActivity : AppCompatActivity() {
     private lateinit var binding: ActivityEditProfileBinding
     private val auth = FirebaseAuth.getInstance()
     private val firestore = FirebaseFirestore.getInstance()
-    private val realtimeDb = FirebaseDatabase.getInstance().reference
     private var snapshotListener: ListenerRegistration? = null
     private lateinit var progressDialog: ProgressDialog
 
@@ -47,14 +46,11 @@ class EditProfileActivity : AppCompatActivity() {
         binding = ActivityEditProfileBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Setup Progress Dialog
         progressDialog = ProgressDialog(this).apply {
-            setMessage("Updating professional profile...")
+            setMessage("Updating profile...")
             setCancelable(false)
         }
 
-        // FIXED: Toolbar Back Navigation
-        // Instead of looking for a separate btnBack, we use the Toolbar's built-in navigation
         setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         binding.toolbar.setNavigationOnClickListener {
@@ -63,7 +59,6 @@ class EditProfileActivity : AppCompatActivity() {
 
         loadUserData()
 
-        // Toggle Tracking logic
         binding.switchLocationTracking.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 checkPermissionsAndStart()
@@ -72,7 +67,6 @@ class EditProfileActivity : AppCompatActivity() {
             }
         }
 
-        // Save Profile logic - Matches the ID in your XML (btnUpdateProfile)
         binding.btnUpdateProfile.setOnClickListener {
             saveProfileChanges()
         }
@@ -85,32 +79,32 @@ class EditProfileActivity : AppCompatActivity() {
     private fun loadUserData() {
         val userId = auth.currentUser?.uid ?: return
 
-        // 1. Load Business Details from Realtime Database
-        realtimeDb.child("Businesses").child(userId).child("details")
-            .get().addOnSuccessListener { snapshot ->
-                if (snapshot.exists()) {
-                    // etProfileName in XML is used for the Store Name
-                    binding.etProfileName.setText(snapshot.child("businessName").value?.toString())
-                    binding.etPhone.setText(snapshot.child("phone").value?.toString())
+        // Load Personal Info from Firestore only
+        firestore.collection("users").document(userId).get()
+            .addOnSuccessListener { document ->
+                if (document.exists()) {
+                    binding.etProfileName.setText(document.getString("name"))
+                    binding.etPhone.setText(document.getString("phone"))
+
+                    val lat = document.getDouble("latitude") ?: 0.0
+                    val lng = document.getDouble("longitude") ?: 0.0
+                    binding.etLat.setText(String.format("%.6f", lat))
+                    binding.etLng.setText(String.format("%.6f", lng))
+
+                    val isEnabled = document.getBoolean("isTrackingEnabled") ?: false
+                    binding.switchLocationTracking.isChecked = isEnabled
                 }
             }
 
-        // 2. Load Location Info from Firestore (Live Listener)
+        // Live Location Listener
         snapshotListener = firestore.collection("users").document(userId)
             .addSnapshotListener { snapshot, e ->
                 if (e != null || snapshot == null || !snapshot.exists()) return@addSnapshotListener
 
-                // Update read-only coordinates
                 val lat = snapshot.getDouble("latitude") ?: 0.0
                 val lng = snapshot.getDouble("longitude") ?: 0.0
                 binding.etLat.setText(String.format("%.6f", lat))
                 binding.etLng.setText(String.format("%.6f", lng))
-
-                // Sync tracking switch state
-                val isEnabled = snapshot.getBoolean("isTrackingEnabled") ?: false
-                if (binding.switchLocationTracking.isChecked != isEnabled) {
-                    binding.switchLocationTracking.isChecked = isEnabled
-                }
             }
     }
 
@@ -154,31 +148,28 @@ class EditProfileActivity : AppCompatActivity() {
         val newPhone = binding.etPhone.text.toString().trim()
 
         if (newName.isEmpty()) {
-            binding.etProfileName.error = "Store name is required"
+            binding.etProfileName.error = "Name is required"
             return
         }
 
         progressDialog.show()
 
-        // Update Realtime Database
-        val rtUpdates = HashMap<String, Any?>()
-        rtUpdates["Businesses/$userId/details/businessName"] = newName
-        rtUpdates["Businesses/$userId/details/phone"] = newPhone
+        // Update ONLY Firestore (This keeps you out of the Businesses list)
+        val fsUpdates = hashMapOf<String, Any>(
+            "name" to newName,
+            "phone" to newPhone
+        )
 
-        // Update Firestore for general user consistency
-        val fsUpdates = hashMapOf<String, Any>("name" to newName)
-
-        realtimeDb.updateChildren(rtUpdates).addOnSuccessListener {
-            firestore.collection("users").document(userId).update(fsUpdates)
-                .addOnSuccessListener {
-                    progressDialog.dismiss()
-                    Toast.makeText(this, "Profile updated successfully!", Toast.LENGTH_SHORT).show()
-                    finish()
-                }
-        }.addOnFailureListener {
-            progressDialog.dismiss()
-            Toast.makeText(this, "Failed to update profile.", Toast.LENGTH_SHORT).show()
-        }
+        firestore.collection("users").document(userId).update(fsUpdates)
+            .addOnSuccessListener {
+                progressDialog.dismiss()
+                Toast.makeText(this, "Profile updated successfully!", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+            .addOnFailureListener {
+                progressDialog.dismiss()
+                Toast.makeText(this, "Failed to update profile.", Toast.LENGTH_SHORT).show()
+            }
     }
 
     private fun performLogout() {

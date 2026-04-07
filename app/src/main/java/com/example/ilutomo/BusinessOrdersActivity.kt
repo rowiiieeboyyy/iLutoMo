@@ -9,6 +9,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -26,10 +27,8 @@ class BusinessOrdersActivity : AppCompatActivity() {
     private val auth = FirebaseAuth.getInstance()
     private val firestore = FirebaseFirestore.getInstance()
 
-    // We no longer rely on businessName for the database path
     private val orderList = mutableListOf<Order>()
     private lateinit var adapter: BusinessOrdersAdapter
-
     private var locationListener: ListenerRegistration? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,7 +37,7 @@ class BusinessOrdersActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         setupRecyclerView()
-        loadOrders() // Directly call loadOrders using UID
+        loadOrders()
         setupBottomNavigation()
 
         binding.tvNoOrders.setOnClickListener {
@@ -110,7 +109,6 @@ class BusinessOrdersActivity : AppCompatActivity() {
     private fun loadOrders() {
         val uid = auth.currentUser?.uid ?: return
 
-        // FIX: Look in BusinessOrders -> UID
         database.child("BusinessOrders").child(uid).addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 orderList.clear()
@@ -139,9 +137,8 @@ class BusinessOrdersActivity : AppCompatActivity() {
 
     private fun updateOrderStatus(order: Order, status: String) {
         val uid = auth.currentUser?.uid ?: return
-
         val updates = HashMap<String, Any?>()
-        // FIX: Path uses the business owner's UID
+
         updates["BusinessOrders/$uid/${order.id}/status"] = status
         updates["Users/${order.userId}/MyOrders/${order.id}/status"] = status
 
@@ -177,7 +174,6 @@ class BusinessOrdersActivity : AppCompatActivity() {
         locationListener?.remove()
     }
 
-    // --- ADAPTER remains largely the same but ensure Order model matches ---
     class BusinessOrdersAdapter(
         private val orders: List<Order>,
         private val onStatusUpdate: (Order, String) -> Unit,
@@ -190,6 +186,7 @@ class BusinessOrdersActivity : AppCompatActivity() {
             val tvDate: TextView = view.findViewById(R.id.tvOrderDate)
             val tvDetails: TextView = view.findViewById(R.id.tvOrderDetails)
             val btnAccept: Button = view.findViewById(R.id.btnAcceptOrder)
+            val btnDecline: Button = view.findViewById(R.id.btnDeclineOrder)
             val btnComplete: Button = view.findViewById(R.id.btnCompleteOrder)
             val btnTrack: Button = view.findViewById(R.id.btnTrackCustomer)
         }
@@ -213,29 +210,45 @@ class BusinessOrdersActivity : AppCompatActivity() {
                 "• ${it.name} (${it.amount})"
             }
 
+            // Reset visibilities first
+            holder.btnAccept.visibility = View.GONE
+            holder.btnDecline.visibility = View.GONE
+            holder.btnComplete.visibility = View.GONE
+            holder.btnTrack.visibility = View.GONE
+
             holder.btnTrack.setOnClickListener { onTrackClick(order) }
 
             when (order.status) {
                 "Pending" -> {
                     holder.btnAccept.visibility = View.VISIBLE
-                    holder.btnComplete.visibility = View.GONE
+                    holder.btnDecline.visibility = View.VISIBLE
+
                     holder.btnAccept.setOnClickListener { onStatusUpdate(order, "Preparing Ingredients") }
+                    holder.btnDecline.setOnClickListener {
+                        AlertDialog.Builder(holder.itemView.context)
+                            .setTitle("Decline Order")
+                            .setMessage("Are you sure you want to decline this order?")
+                            .setPositiveButton("Yes") { _, _ -> onStatusUpdate(order, "Declined") }
+                            .setNegativeButton("No", null)
+                            .show()
+                    }
                 }
                 "Preparing Ingredients" -> {
-                    holder.btnAccept.visibility = View.GONE
+                    // Track button is now visible while preparing
+                    holder.btnTrack.visibility = View.VISIBLE
                     holder.btnComplete.visibility = View.VISIBLE
                     holder.btnComplete.text = "Ready for Pickup"
                     holder.btnComplete.setOnClickListener { onStatusUpdate(order, "Ready for Pickup") }
                 }
                 "Ready for Pickup" -> {
-                    holder.btnAccept.visibility = View.GONE
+                    // Track button remains visible when ready
+                    holder.btnTrack.visibility = View.VISIBLE
                     holder.btnComplete.visibility = View.VISIBLE
                     holder.btnComplete.text = "Mark Completed"
                     holder.btnComplete.setOnClickListener { onStatusUpdate(order, "Completed") }
                 }
                 else -> {
-                    holder.btnAccept.visibility = View.GONE
-                    holder.btnComplete.visibility = View.GONE
+                    // No buttons for Declined or Completed status
                 }
             }
         }

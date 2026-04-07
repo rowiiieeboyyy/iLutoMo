@@ -20,7 +20,7 @@
                 android:id="@+id/tvOrderId"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Order #123"
+                android:text="Order #------"
                 android:textStyle="bold"
                 android:textColor="#1B3022"/>
             <TextView
@@ -37,44 +37,42 @@
             android:id="@+id/tvOrderDate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Date: Oct 26, 2023"
+            android:text="Date: --/--/----"
             android:textSize="12sp"
             android:layout_marginTop="4dp"/>
 
         <TextView
             android:id="@+id/tvOrderPickup"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Pickup at: Business Name\nAddress"
+            android:text="Store: Loading..."
             android:textSize="12sp"
-            android:textColor="#2E5A27"
-            android:visibility="visible"/>
+            android:textColor="#2E5A27"/>
 
         <TextView
             android:id="@+id/tvOrderPickupTime"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
-            android:text="Pickup Time: ASAP"
+            android:text="Pickup Time: --:--"
             android:textSize="12sp"
             android:textStyle="bold"
-            android:textColor="#E64A19"
-            android:visibility="visible"/>
+            android:textColor="#E64A19"/>
 
         <TextView
             android:id="@+id/tvOrderDetails"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Items: Garlic, Chicken..."
+            android:text="Items: Loading..."
             android:textSize="13sp"/>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="12dp"
             android:gravity="center_vertical">
 
             <Button
@@ -100,9 +98,10 @@
                 android:id="@+id/tvOrderTotal"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Total: ₱150.00"
+                android:text="Total: ₱0.00"
                 android:textStyle="bold"
-                android:textColor="#000000"/>
+                android:textColor="#000000"
+                android:textSize="14sp"/>
         </LinearLayout>
 
     </LinearLayout>

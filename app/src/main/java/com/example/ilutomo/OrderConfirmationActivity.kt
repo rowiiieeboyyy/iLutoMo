@@ -3,6 +3,7 @@ package com.example.ilutomo
 import android.app.TimePickerDialog
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
 import android.view.View
 import android.widget.*
@@ -24,17 +25,18 @@ class OrderConfirmationActivity : AppCompatActivity() {
 
     private val database = FirebaseDatabase.getInstance().reference
     private val auth = FirebaseAuth.getInstance()
-    private var orderId: String? = null
-    private var currentBusiness: String = ""
-    private var orderListener: ValueEventListener? = null
+
+    private var storeName: String = ""
+    private var storeUid: String = ""
+    private var selectedItems = ArrayList<PantryIngredient>()
+
+    // Variable to track the chosen pickup time
+    private var finalPickupTime: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_order_confirmation)
 
-        orderId = intent.getStringExtra("ORDER_ID")
-
-        // Initialize Views
         llOrderItems = findViewById(R.id.llOrderItemsContainer)
         tvStatus = findViewById(R.id.tvOrderStatus)
         tvAddress = findViewById(R.id.tvPickupAddress)
@@ -43,111 +45,104 @@ class OrderConfirmationActivity : AppCompatActivity() {
         btnCancel = findViewById(R.id.btnCancelOrder)
         btnPlaceOrder = findViewById(R.id.order_btn_place_order)
 
+        storeName = intent.getStringExtra("STORE_NAME") ?: ""
+        storeUid = intent.getStringExtra("STORE_UID") ?: ""
+        selectedItems = intent.getSerializableExtra("SELECTED_ITEMS") as? ArrayList<PantryIngredient> ?: arrayListOf()
+
+        tvAddress.text = "$storeName\nTeresa, Rizal"
+        tvStatus.text = "Order Status : Pending"
+
+        // Set initial default pickup time (30 mins from now)
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.MINUTE, 30)
+        finalPickupTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(calendar.time)
+        tvPickupTime.text = "Pick up at\n$finalPickupTime"
+
+        displayDraftItems()
+
         tvPickupTime.setOnClickListener { showTimePicker() }
+        findViewById<ImageView>(R.id.order_back_arrow)?.setOnClickListener { finish() }
+        btnCancel.setOnClickListener { finish() }
 
-        // FIXED: Back arrow logic - use finish() to avoid activity loops
-        findViewById<ImageView>(R.id.order_back_arrow)?.setOnClickListener {
-            finish()
-        }
-
-        btnCancel.setOnClickListener { cancelOrder() }
-
-        // FIXED: Place Order navigation
         btnPlaceOrder.setOnClickListener {
-            Toast.makeText(this, "Order tracked successfully", Toast.LENGTH_SHORT).show()
+            executeFirebaseSave()
+        }
+    }
+
+    private fun displayDraftItems() {
+        llOrderItems.removeAllViews()
+        for (i in selectedItems.indices step 2) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                weightSum = 2f
+            }
+            row.addView(createItemCard(selectedItems[i]))
+            if (i + 1 < selectedItems.size) {
+                row.addView(createItemCard(selectedItems[i + 1]))
+            } else {
+                row.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 1, 1f) })
+            }
+            llOrderItems.addView(row)
+        }
+    }
+
+    private fun executeFirebaseSave() {
+        val uid = auth.currentUser?.uid ?: return
+        if (storeUid.isEmpty()) return
+
+        btnPlaceOrder.isEnabled = false
+
+        val orderRef = database.child("BusinessOrders").child(storeUid).push()
+        val orderId = orderRef.key ?: return
+
+        // Create the Order object using finalPickupTime
+        val orderData = Order(
+            id = orderId,
+            userId = uid,
+            businessUid = storeUid,
+            businessName = storeName,
+            items = selectedItems,
+            totalAmount = selectedItems.sumOf { it.price },
+            timestamp = System.currentTimeMillis(),
+            status = "Pending",
+            pickupAddress = "Teresa, Rizal",
+            pickupTime = finalPickupTime // Uses the updated variable
+        )
+
+        val updates = HashMap<String, Any?>()
+        updates["BusinessOrders/$storeUid/$orderId"] = orderData
+        updates["Users/$uid/MyOrders/$orderId"] = orderData
+
+        database.updateChildren(updates).addOnSuccessListener {
+            val pantryRef = database.child("Users").child(uid).child("Pantry")
+            selectedItems.forEach { item -> pantryRef.child(item.id).removeValue() }
+
+            Toast.makeText(this, "Order Placed Successfully!", Toast.LENGTH_SHORT).show()
             val intent = Intent(this, OrdersActivity::class.java)
-            // Use CLEAR_TOP and SINGLE_TOP to ensure we don't create a loop
-            intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
             startActivity(intent)
             finish()
-        }
-
-        if (orderId != null) {
-            loadOrderDetails()
-        } else {
-            Toast.makeText(this, "Order ID missing", Toast.LENGTH_SHORT).show()
-            finish()
+        }.addOnFailureListener {
+            btnPlaceOrder.isEnabled = true
+            Toast.makeText(this, "Failed to place order.", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun showTimePicker() {
         val c = Calendar.getInstance()
-        val timePickerDialog = TimePickerDialog(this, { _, h, m ->
-            val cal = Calendar.getInstance()
-            cal.set(Calendar.HOUR_OF_DAY, h)
-            cal.set(Calendar.MINUTE, m)
-            val timeStr = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(cal.time)
-            updatePickupTimeInFirebase(timeStr)
-        }, c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), false)
-        timePickerDialog.show()
-    }
+        TimePickerDialog(this, { _, h, m ->
+            val cal = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, h); set(Calendar.MINUTE, m) }
 
-    private fun updatePickupTimeInFirebase(newTime: String) {
-        val id = orderId ?: return
-        val uid = auth.currentUser?.uid ?: return
-        val updates = HashMap<String, Any?>()
-        updates["Users/$uid/MyOrders/$id/pickupTime"] = newTime
-        if (currentBusiness.isNotEmpty()) {
-            updates["BusinessOrders/$currentBusiness/$id/pickupTime"] = newTime
-        }
-        database.updateChildren(updates).addOnSuccessListener {
-            tvPickupTime.text = "Pick up at\n$newTime"
-            Toast.makeText(this, "Pickup time updated", Toast.LENGTH_SHORT).show()
-        }
-    }
+            // Critical Step: Update the variable AND the UI text
+            finalPickupTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(cal.time)
+            tvPickupTime.text = "Pick up at\n$finalPickupTime"
 
-    private fun loadOrderDetails() {
-        val id = orderId ?: return
-        val uid = auth.currentUser?.uid ?: return
-        orderListener = database.child("Users").child(uid).child("MyOrders").child(id)
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val order = snapshot.getValue(Order::class.java)
-                    if (order != null) {
-                        currentBusiness = order.businessName
-                        updateUI(order)
-                    }
-                }
-                override fun onCancelled(error: DatabaseError) {}
-            })
-    }
-
-    private fun updateUI(order: Order) {
-        tvStatus.text = "Order Status : ${order.status}"
-        tvAddress.text = "${order.businessName}\n${order.pickupAddress}"
-        tvPickupTime.text = if (order.pickupTime.isEmpty()) "Set Pickup Time" else "Pick up at\n${order.pickupTime}"
-        tvExpectedReadyTime.text = "Approximately 30 minutes"
-
-        llOrderItems.removeAllViews()
-        val items = order.items
-        for (i in items.indices step 2) {
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                weightSum = 2f
-            }
-            row.addView(createItemCard(items[i]))
-            if (i + 1 < items.size) {
-                row.addView(createItemCard(items[i + 1]))
-            } else {
-                row.addView(View(this).apply {
-                    layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
-                })
-            }
-            llOrderItems.addView(row)
-        }
-
-        val currentStatus = order.status.lowercase(Locale.ROOT)
-        if (currentStatus == "pending" || currentStatus == "preparing ingredients") {
-            btnCancel.visibility = View.VISIBLE
-        } else {
-            btnCancel.visibility = View.GONE
-        }
+        }, c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), false).show()
     }
 
     private fun createItemCard(item: PantryIngredient): CardView {
         val card = CardView(this).apply {
-            val lp = LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(8, 8, 8, 8) }
-            layoutParams = lp
+            layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(8, 8, 8, 8) }
             radius = 16f
             cardElevation = 4f
         }
@@ -156,48 +151,16 @@ class OrderConfirmationActivity : AppCompatActivity() {
             setPadding(16, 16, 16, 16)
         }
         inner.addView(View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(-1, 180).apply { topMargin = 8 }
+            layoutParams = LinearLayout.LayoutParams(-1, 180)
             setBackgroundColor(Color.parseColor("#F5F5F5"))
         })
         inner.addView(TextView(this).apply {
-            text = item.brandName.ifEmpty { item.name }
-            textSize = 14f
-            setTypeface(null, android.graphics.Typeface.BOLD)
+            text = item.name; textSize = 14f; setTypeface(null, Typeface.BOLD)
         })
         inner.addView(TextView(this).apply {
-            text = "₱${"%.2f".format(item.price)}"
-            textSize = 16f
-            setTextColor(Color.parseColor("#2E7D32"))
+            text = "₱${"%.2f".format(item.price)}"; textSize = 16f; setTextColor(Color.parseColor("#2E7D32"))
         })
         card.addView(inner)
         return card
-    }
-
-    private fun cancelOrder() {
-        val id = orderId ?: return
-        val uid = auth.currentUser?.uid ?: return
-        val updates = HashMap<String, Any?>()
-        updates["Users/$uid/MyOrders/$id"] = null
-        if (currentBusiness.isNotEmpty()) {
-            updates["BusinessOrders/$currentBusiness/$id"] = null
-        }
-        database.updateChildren(updates).addOnSuccessListener {
-            Toast.makeText(this, "Order Cancelled", Toast.LENGTH_SHORT).show()
-            // After cancellation, go back to the Orders List
-            val intent = Intent(this, OrdersActivity::class.java)
-            intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
-            startActivity(intent)
-            finish()
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        orderListener?.let {
-            val uid = auth.currentUser?.uid
-            if (uid != null && orderId != null) {
-                database.child("Users").child(uid).child("MyOrders").child(orderId!!).removeEventListener(it)
-            }
-        }
     }
 }

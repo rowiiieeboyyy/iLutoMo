@@ -9,7 +9,6 @@ import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
-import java.text.SimpleDateFormat
 import java.util.*
 
 class PantryActivity : AppCompatActivity() {
@@ -57,7 +56,6 @@ class PantryActivity : AppCompatActivity() {
                 for (bizSnapshot in snapshot.children) {
                     val name = bizSnapshot.child("details").child("businessName").value?.toString()
                     val uid = bizSnapshot.key
-
                     if (name != null && uid != null) {
                         storeNames.add(name)
                         storeUids.add(uid)
@@ -67,56 +65,25 @@ class PantryActivity : AppCompatActivity() {
                 if (storeNames.isEmpty()) {
                     Toast.makeText(this@PantryActivity, "No stores available", Toast.LENGTH_SHORT).show()
                 } else {
-                    val builder = AlertDialog.Builder(this@PantryActivity)
-                    builder.setTitle("Select Store to Place Order")
-                    builder.setItems(storeNames.toTypedArray()) { _, which ->
-                        processCheckout(storeNames[which], storeUids[which], selectedItems)
-                    }
-                    builder.setNegativeButton("Cancel", null)
-                    builder.show()
+                    AlertDialog.Builder(this@PantryActivity)
+                        .setTitle("Select Store to Pick Up")
+                        .setItems(storeNames.toTypedArray()) { _, which ->
+                            navigateToConfirmation(storeNames[which], storeUids[which], selectedItems)
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
                 }
             }
             override fun onCancelled(error: DatabaseError) {}
         })
     }
 
-    private fun processCheckout(businessName: String, businessUid: String, selectedItems: List<PantryIngredient>) {
-        val uid = auth.currentUser?.uid ?: return
-
-        val orderRef = database.child("BusinessOrders").child(businessUid).push()
-        val orderId = orderRef.key ?: return
-
-        val calendar = Calendar.getInstance()
-        calendar.add(Calendar.MINUTE, 30)
-        val defaultTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(calendar.time)
-
-        // UPDATED: Now includes businessUid in the Order object
-        val orderData = Order(
-            id = orderId,
-            userId = uid,
-            businessUid = businessUid, // This is the new field we added to Models.kt
-            timestamp = System.currentTimeMillis(),
-            items = selectedItems,
-            totalAmount = selectedItems.sumOf { it.price },
-            status = "Pending",
-            businessName = businessName,
-            pickupAddress = "Teresa, Rizal",
-            pickupTime = defaultTime
-        )
-
-        val updates = HashMap<String, Any?>()
-        updates["BusinessOrders/$businessUid/$orderId"] = orderData
-        updates["Users/$uid/MyOrders/$orderId"] = orderData
-
-        database.updateChildren(updates).addOnSuccessListener {
-            val pantryRef = database.child("Users").child(uid).child("Pantry")
-            selectedItems.forEach { item -> pantryRef.child(item.id).removeValue() }
-
-            val intent = Intent(this, OrderConfirmationActivity::class.java)
-            intent.putExtra("ORDER_ID", orderId)
-            intent.putExtra("STORE_UID", businessUid)
-            startActivity(intent)
-        }
+    private fun navigateToConfirmation(businessName: String, businessUid: String, selectedItems: List<PantryIngredient>) {
+        val intent = Intent(this, OrderConfirmationActivity::class.java)
+        intent.putExtra("STORE_NAME", businessName)
+        intent.putExtra("STORE_UID", businessUid)
+        intent.putExtra("SELECTED_ITEMS", ArrayList(selectedItems))
+        startActivity(intent)
     }
 
     private fun loadPantryIngredients() {
