@@ -6,23 +6,37 @@
     android:background="#FFFFFF">
 
     <TextView
+        android:id="@+id/tvWelcome"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="8dp"
+        android:text="Welcome!"
+        android:textColor="#2D5A27"
+        android:textSize="16sp"
+        android:textStyle="normal"
+        app:layout_constraintEnd_toStartOf="@+id/ivHomeProfile"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
         android:id="@+id/tvHomeTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
         android:text="Explore Dishes"
+        android:textColor="#2D5A27"
         android:textSize="22sp"
         android:textStyle="bold"
-        android:layout_marginTop="16dp"
-        android:layout_marginStart="16dp"
-        android:textColor="#2D5A27"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvWelcome" />
 
     <ImageView
         android:id="@+id/ivHomeProfile"
         android:layout_width="50dp"
         android:layout_height="50dp"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="12dp"
         android:layout_marginEnd="16dp"
         android:padding="5dp"
         android:src="@drawable/my_profile"
@@ -37,10 +51,10 @@
         android:layout_marginTop="12dp"
         android:background="@drawable/search_background"
         app:iconifiedByDefault="false"
-        app:queryHint="Search recipes..."
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/ivHomeProfile" />
+        app:layout_constraintTop_toBottomOf="@id/tvHomeTitle"
+        app:queryHint="Search recipes..." />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvHomeRecipes"
@@ -58,10 +72,10 @@
         android:layout_width="match_parent"
         android:layout_height="65dp"
         android:background="#FFFFFF"
-        app:menu="@menu/bottom_nav_menu"
-        app:labelVisibilityMode="labeled"
         app:itemIconTint="#4B8A34"
         app:itemTextColor="#4B8A34"
-        app:layout_constraintBottom_toBottomOf="parent" />
+        app:labelVisibilityMode="labeled"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:menu="@menu/bottom_nav_menu" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

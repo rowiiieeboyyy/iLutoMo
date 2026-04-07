@@ -49,7 +49,18 @@
             android:text="Pickup at: Business Name\nAddress"
             android:textSize="12sp"
             android:textColor="#2E5A27"
-            android:visibility="gone"/>
+            android:visibility="visible"/>
+
+        <TextView
+            android:id="@+id/tvOrderPickupTime"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Pickup Time: ASAP"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="#E64A19"
+            android:visibility="visible"/>
 
         <TextView
             android:id="@+id/tvOrderDetails"

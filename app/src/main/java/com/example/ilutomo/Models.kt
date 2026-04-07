@@ -41,6 +41,7 @@ data class PantryIngredient(
 data class Order(
     var id: String = "",
     var userId: String = "",
+    var businessUid: String = "", // NEW: Added to link orders to the correct store permanent folder
     var timestamp: Long = 0,
     var items: List<PantryIngredient> = emptyList(),
     var totalAmount: Double = 0.0,

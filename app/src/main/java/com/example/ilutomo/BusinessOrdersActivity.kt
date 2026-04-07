@@ -1,8 +1,8 @@
 package com.example.ilutomo
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -25,11 +25,11 @@ class BusinessOrdersActivity : AppCompatActivity() {
     private val database = FirebaseDatabase.getInstance().reference
     private val auth = FirebaseAuth.getInstance()
     private val firestore = FirebaseFirestore.getInstance()
-    private var businessName: String? = null
+
+    // We no longer rely on businessName for the database path
     private val orderList = mutableListOf<Order>()
     private lateinit var adapter: BusinessOrdersAdapter
 
-    // To prevent memory leaks and redundant listeners
     private var locationListener: ListenerRegistration? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,8 +38,15 @@ class BusinessOrdersActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         setupRecyclerView()
-        fetchBusinessNameAndLoadOrders()
+        loadOrders() // Directly call loadOrders using UID
         setupBottomNavigation()
+
+        binding.tvNoOrders.setOnClickListener {
+            if (locationListener != null) {
+                stopTrackingUI()
+                Toast.makeText(this, "Tracking stopped", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun setupRecyclerView() {
@@ -51,61 +58,60 @@ class BusinessOrdersActivity : AppCompatActivity() {
         binding.rvBusinessOrders.adapter = adapter
     }
 
-    // LISTENS TO CUSTOMER GPS IN REAL-TIME
-    private fun startTrackingCustomer(customerUid: String) {
-        if (customerUid.isEmpty()) {
+    private fun startTrackingCustomer(customerUid: String?) {
+        if (customerUid.isNullOrEmpty()) {
             Toast.makeText(this, "Cannot track: Customer ID missing", Toast.LENGTH_SHORT).show()
             return
         }
 
-        // Remove previous listener before starting a new one
         locationListener?.remove()
-
-        Toast.makeText(this, "Fetching live location...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Connecting to customer GPS...", Toast.LENGTH_SHORT).show()
 
         locationListener = firestore.collection("users").document(customerUid)
             .addSnapshotListener { snapshot, e ->
                 if (e != null) {
-                    Log.e("Tracking", "Listen failed.", e)
+                    Toast.makeText(this, "Tracking Error: ${e.message}", Toast.LENGTH_SHORT).show()
                     return@addSnapshotListener
                 }
 
                 if (snapshot != null && snapshot.exists()) {
                     val lat = snapshot.getDouble("latitude") ?: 0.0
                     val lng = snapshot.getDouble("longitude") ?: 0.0
-                    val isTracking = snapshot.getBoolean("isTrackingEnabled") ?: false
+                    val isActive = snapshot.getBoolean("isTrackingActive") ?: false
 
-                    if (isTracking) {
-                        // Displaying the location in the 'No Orders' field as a status bar
+                    if (lat != 0.0 || lng != 0.0) {
                         binding.tvNoOrders.visibility = View.VISIBLE
-                        binding.tvNoOrders.text = "Tracking Customer: $lat, $lng"
-                        binding.tvNoOrders.setBackgroundColor(getColor(android.R.color.holo_blue_light))
+                        val statusText = if (isActive) "LIVE" else "LAST SEEN"
+                        binding.tvNoOrders.text = "[$statusText] LOC: $lat, $lng\n(Tap to close tracking)"
+                        val bgColor = if (isActive) "#2196F3" else "#757575"
+                        binding.tvNoOrders.setBackgroundColor(Color.parseColor(bgColor))
+                        binding.tvNoOrders.setTextColor(Color.WHITE)
                     } else {
-                        binding.tvNoOrders.text = "Customer has disabled live tracking."
-                        binding.tvNoOrders.setBackgroundColor(getColor(android.R.color.transparent))
-                        locationListener?.remove()
+                        stopTrackingUI()
                     }
                 }
             }
     }
 
-    private fun fetchBusinessNameAndLoadOrders() {
-        val uid = auth.currentUser?.uid ?: return
-        firestore.collection("users").document(uid).get()
-            .addOnSuccessListener { document ->
-                businessName = document.getString("businessName")
-                if (!businessName.isNullOrEmpty()) {
-                    loadOrders()
-                } else {
-                    binding.tvNoOrders.text = "Please set Business Name in Profile"
-                    binding.tvNoOrders.visibility = View.VISIBLE
-                }
-            }
+    private fun stopTrackingUI() {
+        locationListener?.remove()
+        locationListener = null
+        binding.tvNoOrders.setBackgroundColor(Color.TRANSPARENT)
+        binding.tvNoOrders.setTextColor(Color.BLACK)
+
+        if (orderList.isEmpty()) {
+            binding.tvNoOrders.text = "No active orders"
+            binding.tvNoOrders.visibility = View.VISIBLE
+        } else {
+            binding.tvNoOrders.visibility = View.GONE
+        }
     }
 
     private fun loadOrders() {
-        val biz = businessName ?: return
-        database.child("BusinessOrders").child(biz).addValueEventListener(object : ValueEventListener {
+        val uid = auth.currentUser?.uid ?: return
+
+        // FIX: Look in BusinessOrders -> UID
+        database.child("BusinessOrders").child(uid).addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 orderList.clear()
                 for (child in snapshot.children) {
@@ -118,12 +124,13 @@ class BusinessOrdersActivity : AppCompatActivity() {
                 orderList.sortByDescending { it.timestamp }
                 adapter.notifyDataSetChanged()
 
-                // Only show "No Orders" text if we aren't currently tracking someone
-                if (orderList.isEmpty()) {
-                    binding.tvNoOrders.text = "No active orders for $biz"
-                    binding.tvNoOrders.visibility = View.VISIBLE
-                } else if (locationListener == null) {
-                    binding.tvNoOrders.visibility = View.GONE
+                if (locationListener == null) {
+                    if (orderList.isEmpty()) {
+                        binding.tvNoOrders.text = "No active orders"
+                        binding.tvNoOrders.visibility = View.VISIBLE
+                    } else {
+                        binding.tvNoOrders.visibility = View.GONE
+                    }
                 }
             }
             override fun onCancelled(error: DatabaseError) {}
@@ -131,9 +138,11 @@ class BusinessOrdersActivity : AppCompatActivity() {
     }
 
     private fun updateOrderStatus(order: Order, status: String) {
-        val biz = businessName ?: return
+        val uid = auth.currentUser?.uid ?: return
+
         val updates = HashMap<String, Any?>()
-        updates["BusinessOrders/$biz/${order.id}/status"] = status
+        // FIX: Path uses the business owner's UID
+        updates["BusinessOrders/$uid/${order.id}/status"] = status
         updates["Users/${order.userId}/MyOrders/${order.id}/status"] = status
 
         database.updateChildren(updates).addOnSuccessListener {
@@ -144,14 +153,22 @@ class BusinessOrdersActivity : AppCompatActivity() {
     private fun setupBottomNavigation() {
         binding.businessBottomNav.selectedItemId = R.id.nav_business_orders
         binding.businessBottomNav.setOnItemSelectedListener { item ->
-            when (item.itemId) {
-                R.id.nav_business_dashboard -> { startActivity(Intent(this, BusinessDashboardActivity::class.java)); finish(); true }
-                R.id.nav_business_inventory -> { startActivity(Intent(this, BusinessInventoryActivity::class.java)); finish(); true }
-                R.id.nav_business_orders -> true
-                R.id.nav_business_manage -> { startActivity(Intent(this, BusinessManageActivity::class.java)); finish(); true }
-                R.id.nav_business_profile -> { startActivity(Intent(this, BusinessProfileActivity::class.java)); finish(); true }
-                else -> false
+            if (item.itemId == R.id.nav_business_orders) return@setOnItemSelectedListener true
+
+            val intent = when (item.itemId) {
+                R.id.nav_business_dashboard -> Intent(this, BusinessDashboardActivity::class.java)
+                R.id.nav_business_inventory -> Intent(this, BusinessInventoryActivity::class.java)
+                R.id.nav_business_manage -> Intent(this, BusinessManageActivity::class.java)
+                R.id.nav_business_profile -> Intent(this, BusinessProfileActivity::class.java)
+                else -> null
             }
+
+            intent?.let {
+                it.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                startActivity(it)
+                finish()
+            }
+            true
         }
     }
 
@@ -160,7 +177,7 @@ class BusinessOrdersActivity : AppCompatActivity() {
         locationListener?.remove()
     }
 
-    // --- ADAPTER ---
+    // --- ADAPTER remains largely the same but ensure Order model matches ---
     class BusinessOrdersAdapter(
         private val orders: List<Order>,
         private val onStatusUpdate: (Order, String) -> Unit,
@@ -186,11 +203,14 @@ class BusinessOrdersActivity : AppCompatActivity() {
             val order = orders[position]
             holder.tvId.text = "Order #${order.id.takeLast(6).uppercase()}"
             holder.tvStatus.text = "Status: ${order.status}"
+
             val sdf = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
-            holder.tvDate.text = sdf.format(Date(order.timestamp))
+            val orderDate = sdf.format(Date(order.timestamp))
+            val pickup = if (order.pickupTime.isNullOrEmpty()) "ASAP" else order.pickupTime
+            holder.tvDate.text = "Placed: $orderDate\nPickup: $pickup"
 
             holder.tvDetails.text = order.items.joinToString("\n") {
-                "• ${it.brandName.ifEmpty { it.name }} (${it.size.ifEmpty { it.amount }})"
+                "• ${it.name} (${it.amount})"
             }
 
             holder.btnTrack.setOnClickListener { onTrackClick(order) }
@@ -210,7 +230,7 @@ class BusinessOrdersActivity : AppCompatActivity() {
                 "Ready for Pickup" -> {
                     holder.btnAccept.visibility = View.GONE
                     holder.btnComplete.visibility = View.VISIBLE
-                    holder.btnComplete.text = "Completed"
+                    holder.btnComplete.text = "Mark Completed"
                     holder.btnComplete.setOnClickListener { onStatusUpdate(order, "Completed") }
                 }
                 else -> {

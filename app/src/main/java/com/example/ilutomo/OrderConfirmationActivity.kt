@@ -19,6 +19,8 @@ class OrderConfirmationActivity : AppCompatActivity() {
     private lateinit var tvAddress: TextView
     private lateinit var tvPickupTime: TextView
     private lateinit var tvExpectedReadyTime: TextView
+    private lateinit var btnCancel: Button
+    private lateinit var btnPlaceOrder: Button
 
     private val database = FirebaseDatabase.getInstance().reference
     private val auth = FirebaseAuth.getInstance()
@@ -31,22 +33,31 @@ class OrderConfirmationActivity : AppCompatActivity() {
         setContentView(R.layout.activity_order_confirmation)
 
         orderId = intent.getStringExtra("ORDER_ID")
+
+        // Initialize Views
         llOrderItems = findViewById(R.id.llOrderItemsContainer)
         tvStatus = findViewById(R.id.tvOrderStatus)
         tvAddress = findViewById(R.id.tvPickupAddress)
         tvPickupTime = findViewById(R.id.tvPickupTime)
         tvExpectedReadyTime = findViewById(R.id.tvExpectedReadyTime)
+        btnCancel = findViewById(R.id.btnCancelOrder)
+        btnPlaceOrder = findViewById(R.id.order_btn_place_order)
 
-        // Set up click listener for the pickup time
         tvPickupTime.setOnClickListener { showTimePicker() }
 
-        findViewById<ImageView>(R.id.order_back_arrow)?.setOnClickListener { returnToPantry() }
-        findViewById<Button>(R.id.order_btn_cancel)?.setOnClickListener { cancelOrder() }
+        // FIXED: Back arrow logic - use finish() to avoid activity loops
+        findViewById<ImageView>(R.id.order_back_arrow)?.setOnClickListener {
+            finish()
+        }
 
-        // Logic for the "Place Order" button (previously History)
-        findViewById<Button>(R.id.order_btn_place_order)?.setOnClickListener {
-            // Redirect to History/View Orders screen
+        btnCancel.setOnClickListener { cancelOrder() }
+
+        // FIXED: Place Order navigation
+        btnPlaceOrder.setOnClickListener {
+            Toast.makeText(this, "Order tracked successfully", Toast.LENGTH_SHORT).show()
             val intent = Intent(this, OrdersActivity::class.java)
+            // Use CLEAR_TOP and SINGLE_TOP to ensure we don't create a loop
+            intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             startActivity(intent)
             finish()
         }
@@ -54,6 +65,7 @@ class OrderConfirmationActivity : AppCompatActivity() {
         if (orderId != null) {
             loadOrderDetails()
         } else {
+            Toast.makeText(this, "Order ID missing", Toast.LENGTH_SHORT).show()
             finish()
         }
     }
@@ -67,20 +79,17 @@ class OrderConfirmationActivity : AppCompatActivity() {
             val timeStr = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(cal.time)
             updatePickupTimeInFirebase(timeStr)
         }, c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), false)
-
         timePickerDialog.show()
     }
 
     private fun updatePickupTimeInFirebase(newTime: String) {
         val id = orderId ?: return
         val uid = auth.currentUser?.uid ?: return
-
         val updates = HashMap<String, Any?>()
         updates["Users/$uid/MyOrders/$id/pickupTime"] = newTime
         if (currentBusiness.isNotEmpty()) {
             updates["BusinessOrders/$currentBusiness/$id/pickupTime"] = newTime
         }
-
         database.updateChildren(updates).addOnSuccessListener {
             tvPickupTime.text = "Pick up at\n$newTime"
             Toast.makeText(this, "Pickup time updated", Toast.LENGTH_SHORT).show()
@@ -90,7 +99,6 @@ class OrderConfirmationActivity : AppCompatActivity() {
     private fun loadOrderDetails() {
         val id = orderId ?: return
         val uid = auth.currentUser?.uid ?: return
-
         orderListener = database.child("Users").child(uid).child("MyOrders").child(id)
             .addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
@@ -128,8 +136,12 @@ class OrderConfirmationActivity : AppCompatActivity() {
             llOrderItems.addView(row)
         }
 
-        findViewById<Button>(R.id.order_btn_cancel).visibility =
-            if (order.status == "Pending") View.VISIBLE else View.GONE
+        val currentStatus = order.status.lowercase(Locale.ROOT)
+        if (currentStatus == "pending" || currentStatus == "preparing ingredients") {
+            btnCancel.visibility = View.VISIBLE
+        } else {
+            btnCancel.visibility = View.GONE
+        }
     }
 
     private fun createItemCard(item: PantryIngredient): CardView {
@@ -164,31 +176,28 @@ class OrderConfirmationActivity : AppCompatActivity() {
     private fun cancelOrder() {
         val id = orderId ?: return
         val uid = auth.currentUser?.uid ?: return
-
         val updates = HashMap<String, Any?>()
         updates["Users/$uid/MyOrders/$id"] = null
         if (currentBusiness.isNotEmpty()) {
             updates["BusinessOrders/$currentBusiness/$id"] = null
         }
-
         database.updateChildren(updates).addOnSuccessListener {
-            returnToPantry()
+            Toast.makeText(this, "Order Cancelled", Toast.LENGTH_SHORT).show()
+            // After cancellation, go back to the Orders List
+            val intent = Intent(this, OrdersActivity::class.java)
+            intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
+            startActivity(intent)
+            finish()
         }
-    }
-
-    private fun returnToPantry() {
-        val intent = Intent(this, PantryActivity::class.java)
-        intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
-        startActivity(intent)
-        finish()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        val uid = auth.currentUser?.uid
-        val id = orderId
-        if (uid != null && id != null && orderListener != null) {
-            database.child("Users").child(uid).child("MyOrders").child(id).removeEventListener(orderListener!!)
+        orderListener?.let {
+            val uid = auth.currentUser?.uid
+            if (uid != null && orderId != null) {
+                database.child("Users").child(uid).child("MyOrders").child(orderId!!).removeEventListener(it)
+            }
         }
     }
 }

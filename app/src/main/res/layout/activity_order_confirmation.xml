@@ -71,7 +71,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp">
-
                 <ImageView
                     android:id="@+id/order_loc_icon"
                     android:layout_width="32dp"
@@ -79,7 +78,6 @@
                     android:src="@android:drawable/ic_menu_mylocation"
                     android:padding="4dp"
                     android:background="#F0F0F0"/>
-
                 <TextView
                     android:id="@+id/order_loc_label"
                     android:layout_width="wrap_content"
@@ -88,7 +86,6 @@
                     android:layout_marginStart="8dp"
                     android:text="Pickup Location"
                     android:textStyle="bold"/>
-
                 <TextView
                     android:id="@+id/tvPickupAddress"
                     android:layout_width="wrap_content"
@@ -99,7 +96,6 @@
                     android:text="Loading..."
                     android:textColor="#9E9E9E"
                     android:textSize="12sp"/>
-
                 <TextView
                     android:id="@+id/tvPickupTime"
                     android:layout_width="wrap_content"
@@ -118,7 +114,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp">
-
                 <ImageView
                     android:id="@+id/order_time_icon"
                     android:layout_width="32dp"
@@ -126,7 +121,6 @@
                     android:src="@android:drawable/ic_menu_recent_history"
                     android:padding="4dp"
                     android:background="#F0F0F0"/>
-
                 <TextView
                     android:id="@+id/order_time_label"
                     android:layout_width="wrap_content"
@@ -135,7 +129,6 @@
                     android:layout_marginStart="8dp"
                     android:text="Expected Ready Time"
                     android:textStyle="bold"/>
-
                 <TextView
                     android:id="@+id/tvExpectedReadyTime"
                     android:layout_width="wrap_content"
@@ -161,21 +154,24 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:layout_marginEnd="4dp"
                     android:text="Place Order"
-                    android:textAllCaps="false"
-                    android:textColor="#000000"
-                    android:backgroundTint="#FFFFFF"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+                    android:backgroundTint="#2E7D32"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold" />
 
                 <Button
-                    android:id="@+id/order_btn_cancel"
+                    android:id="@+id/btnCancelOrder"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:layout_marginStart="8dp"
+                    android:layout_marginStart="4dp"
                     android:text="Cancel Order"
                     android:textAllCaps="false"
-                    android:backgroundTint="#2E5A27"/>
+                    android:backgroundTint="#D32F2F"
+                    android:textColor="#FFFFFF"
+                    app:cornerRadius="4dp"
+                    android:visibility="visible"/>
             </LinearLayout>
 
         </LinearLayout>

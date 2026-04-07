@@ -36,7 +36,6 @@ class PantryActivity : AppCompatActivity() {
 
         setupNavigation()
 
-        // Clicking "Get Ingredients" opens the store list immediately
         btnGetIngredient.setOnClickListener { fetchStoresAndShowDialog() }
         btnClearPantry.setOnClickListener { showClearPantryConfirmation() }
 
@@ -53,8 +52,16 @@ class PantryActivity : AppCompatActivity() {
         database.child("Businesses").addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val storeNames = mutableListOf<String>()
+                val storeUids = mutableListOf<String>()
+
                 for (bizSnapshot in snapshot.children) {
-                    bizSnapshot.key?.let { storeNames.add(it) }
+                    val name = bizSnapshot.child("details").child("businessName").value?.toString()
+                    val uid = bizSnapshot.key
+
+                    if (name != null && uid != null) {
+                        storeNames.add(name)
+                        storeUids.add(uid)
+                    }
                 }
 
                 if (storeNames.isEmpty()) {
@@ -63,8 +70,7 @@ class PantryActivity : AppCompatActivity() {
                     val builder = AlertDialog.Builder(this@PantryActivity)
                     builder.setTitle("Select Store to Place Order")
                     builder.setItems(storeNames.toTypedArray()) { _, which ->
-                        // ONE-TAP: Selecting the store creates the order immediately
-                        processCheckout(storeNames[which], selectedItems)
+                        processCheckout(storeNames[which], storeUids[which], selectedItems)
                     }
                     builder.setNegativeButton("Cancel", null)
                     builder.show()
@@ -74,19 +80,21 @@ class PantryActivity : AppCompatActivity() {
         })
     }
 
-    private fun processCheckout(businessName: String, selectedItems: List<PantryIngredient>) {
+    private fun processCheckout(businessName: String, businessUid: String, selectedItems: List<PantryIngredient>) {
         val uid = auth.currentUser?.uid ?: return
-        val orderRef = database.child("BusinessOrders").child(businessName).push()
+
+        val orderRef = database.child("BusinessOrders").child(businessUid).push()
         val orderId = orderRef.key ?: return
 
-        // Default pickup time (can be edited in the next screen)
         val calendar = Calendar.getInstance()
         calendar.add(Calendar.MINUTE, 30)
         val defaultTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(calendar.time)
 
+        // UPDATED: Now includes businessUid in the Order object
         val orderData = Order(
             id = orderId,
             userId = uid,
+            businessUid = businessUid, // This is the new field we added to Models.kt
             timestamp = System.currentTimeMillis(),
             items = selectedItems,
             totalAmount = selectedItems.sumOf { it.price },
@@ -97,17 +105,16 @@ class PantryActivity : AppCompatActivity() {
         )
 
         val updates = HashMap<String, Any?>()
-        updates["BusinessOrders/$businessName/$orderId"] = orderData
+        updates["BusinessOrders/$businessUid/$orderId"] = orderData
         updates["Users/$uid/MyOrders/$orderId"] = orderData
 
         database.updateChildren(updates).addOnSuccessListener {
-            // Clear checked ingredients from Pantry
             val pantryRef = database.child("Users").child(uid).child("Pantry")
             selectedItems.forEach { item -> pantryRef.child(item.id).removeValue() }
 
-            // Proceed straight to tracking
             val intent = Intent(this, OrderConfirmationActivity::class.java)
             intent.putExtra("ORDER_ID", orderId)
+            intent.putExtra("STORE_UID", businessUid)
             startActivity(intent)
         }
     }

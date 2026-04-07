@@ -2,6 +2,7 @@ package com.example.ilutomo
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -11,6 +12,7 @@ import com.example.ilutomo.databinding.ActivityHomeBinding
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import com.google.firebase.firestore.FirebaseFirestore
+import java.util.*
 import kotlin.math.*
 
 class HomeActivity : AppCompatActivity() {
@@ -31,7 +33,6 @@ class HomeActivity : AppCompatActivity() {
     private var searchQuery = ""
     private var userLat: Double = 0.0
     private var userLng: Double = 0.0
-    private var bMin = 0
     private var bMax = 10000
 
     data class BusinessLocation(val lat: Double, val lng: Double, var distance: Double = 0.0)
@@ -64,13 +65,40 @@ class HomeActivity : AppCompatActivity() {
 
     private fun fetchUserLocationAndData() {
         val uid = auth.currentUser?.uid ?: return
+
+        // Ensure "users" matches the collection name in your EditProfileActivity
         firestore.collection("users").document(uid).get()
             .addOnSuccessListener { document ->
-                userLat = document.getDouble("latitude") ?: 0.0
-                userLng = document.getDouble("longitude") ?: 0.0
+                if (document.exists()) {
+                    // FIX: Changed from "firstName" to "name" to match EditProfileActivity
+                    val fullName = document.getString("name") ?: "User"
+
+                    // Optional: If you only want the first name (e.g. "Kaycie" instead of "Kaycie Ignacio")
+                    val firstName = fullName.split(" ").firstOrNull() ?: fullName
+
+                    updateWelcomeMessage(firstName)
+
+                    userLat = document.getDouble("latitude") ?: 0.0
+                    userLng = document.getDouble("longitude") ?: 0.0
+                }
                 loadBusinessData()
             }
-            .addOnFailureListener { loadBusinessData() }
+            .addOnFailureListener {
+                updateWelcomeMessage("User")
+                loadBusinessData()
+            }
+    }
+
+    private fun updateWelcomeMessage(name: String) {
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val greeting = when (hour) {
+            in 0..11 -> "Good Morning"
+            in 12..16 -> "Good Afternoon"
+            else -> "Good Evening"
+        }
+
+        // Updates the TextView we added to activity_home.xml
+        binding.tvWelcome.text = "$greeting, $name!"
     }
 
     private fun loadBusinessData() {
@@ -133,7 +161,6 @@ class HomeActivity : AppCompatActivity() {
                 override fun onDataChange(s: DataSnapshot) {
                     if (s.exists()) {
                         userDiet = s.child("dietary_type").value?.toString() ?: "Standard"
-                        bMin = s.child("budget_min").value?.toString()?.toDouble()?.toInt() ?: 0
                         bMax = s.child("budget_max").value?.toString()?.toDouble()?.toInt() ?: 10000
                     }
                     loadRecipes()
@@ -152,6 +179,10 @@ class HomeActivity : AppCompatActivity() {
                     if (child.key?.startsWith("recipe_") == true) {
                         val r = child.getValue(Recipe::class.java) ?: continue
                         r.id = child.key!!
+
+                        // Correctly pull category from nested 'allergens' folder
+                        r.category = child.child("allergens").child("category").value?.toString() ?: "Standard"
+                        r.title = child.child("title").value?.toString() ?: r.title
 
                         var cal = 0.0; var pro = 0.0; var carb = 0.0
                         r.ingredients?.forEach { (name, amt) ->

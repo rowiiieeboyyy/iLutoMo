@@ -9,15 +9,15 @@ import com.example.ilutomo.databinding.ActivityBusinessProfileBinding
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 
 class BusinessProfileActivity : AppCompatActivity() {
     private lateinit var binding: ActivityBusinessProfileBinding
     private lateinit var auth: FirebaseAuth
     private lateinit var firestore: FirebaseFirestore
     private val realtimeDb = FirebaseDatabase.getInstance().reference
-    
+
     private var isEditing = false
-    private var currentBusinessName: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,34 +54,31 @@ class BusinessProfileActivity : AppCompatActivity() {
         binding.etBusinessPhone.isEnabled = editing
         binding.etBusinessLat.isEnabled = editing
         binding.etBusinessLng.isEnabled = editing
-        
+
         binding.btnEditProfile.visibility = if (editing) View.GONE else View.VISIBLE
         binding.btnSaveProfile.visibility = if (editing) View.VISIBLE else View.GONE
     }
 
     private fun loadProfile() {
         val uid = auth.currentUser?.uid ?: return
-        
+
+        // We load from the permanent UID node now
         firestore.collection("users").document(uid).get()
             .addOnSuccessListener { document ->
                 if (document.exists()) {
-                    val bizName = document.getString("businessName")
-                    currentBusinessName = bizName
-                    
-                    if (!bizName.isNullOrEmpty()) {
-                        realtimeDb.child("Businesses").child(bizName).child("details")
-                            .get().addOnSuccessListener { snapshot ->
-                                if (snapshot.exists()) {
-                                    binding.etBusinessName.setText(bizName)
-                                    binding.etBusinessAddress.setText(snapshot.child("address").value?.toString() ?: "")
-                                    binding.etBusinessPhone.setText(snapshot.child("phone").value?.toString() ?: "")
-                                    binding.etBusinessLat.setText(snapshot.child("latitude").value?.toString() ?: "")
-                                    binding.etBusinessLng.setText(snapshot.child("longitude").value?.toString() ?: "")
-                                } else {
-                                    binding.etBusinessName.setText(bizName)
-                                }
+                    val bizName = document.getString("businessName") ?: ""
+                    binding.etBusinessName.setText(bizName)
+
+                    // Fetch details from RTDB using UID
+                    realtimeDb.child("Businesses").child(uid).child("details")
+                        .get().addOnSuccessListener { snapshot ->
+                            if (snapshot.exists()) {
+                                binding.etBusinessAddress.setText(snapshot.child("address").value?.toString() ?: "")
+                                binding.etBusinessPhone.setText(snapshot.child("phone").value?.toString() ?: "")
+                                binding.etBusinessLat.setText(snapshot.child("latitude").value?.toString() ?: "")
+                                binding.etBusinessLng.setText(snapshot.child("longitude").value?.toString() ?: "")
                             }
-                    }
+                        }
                 }
             }
             .addOnFailureListener { e ->
@@ -102,34 +99,27 @@ class BusinessProfileActivity : AppCompatActivity() {
             return
         }
 
+        // We include the name inside the details object
         val details = mapOf(
+            "businessName" to newName,
             "address" to address,
             "phone" to phone,
             "latitude" to lat,
             "longitude" to lng
         )
 
-        firestore.collection("users").document(uid).update("businessName", newName)
+        // 1. Update Firestore
+        firestore.collection("users").document(uid).set(mapOf("businessName" to newName), SetOptions.merge())
             .addOnSuccessListener {
-                realtimeDb.child("Businesses").child(newName).child("details").setValue(details)
+                // 2. Update RTDB using the UID as the folder key.
+                // This is what prevents duplicate business folders!
+                realtimeDb.child("Businesses").child(uid).child("details").setValue(details)
                     .addOnSuccessListener {
-                        currentBusinessName = newName
                         toggleEditMode(false)
-                        Toast.makeText(this, "Profile Saved", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Profile Updated Successfully", Toast.LENGTH_SHORT).show()
                     }
                     .addOnFailureListener { e ->
                         Toast.makeText(this, "RTDB Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                    }
-            }
-            .addOnFailureListener {
-                firestore.collection("users").document(uid).set(mapOf("businessName" to newName), com.google.firebase.firestore.SetOptions.merge())
-                    .addOnSuccessListener {
-                        realtimeDb.child("Businesses").child(newName).child("details").setValue(details)
-                            .addOnSuccessListener {
-                                currentBusinessName = newName
-                                toggleEditMode(false)
-                                Toast.makeText(this, "Profile Saved", Toast.LENGTH_SHORT).show()
-                            }
                     }
             }
     }
@@ -137,30 +127,20 @@ class BusinessProfileActivity : AppCompatActivity() {
     private fun setupBottomNavigation() {
         binding.businessBottomNav.selectedItemId = R.id.nav_business_profile
         binding.businessBottomNav.setOnItemSelectedListener { item ->
-            when (item.itemId) {
-                R.id.nav_business_dashboard -> {
-                    startActivity(Intent(this, BusinessDashboardActivity::class.java))
-                    finish()
-                    true
-                }
-                R.id.nav_business_inventory -> {
-                    startActivity(Intent(this, BusinessInventoryActivity::class.java))
-                    finish()
-                    true
-                }
-                R.id.nav_business_orders -> {
-                    startActivity(Intent(this, BusinessOrdersActivity::class.java))
-                    finish()
-                    true
-                }
-                R.id.nav_business_manage -> {
-                    startActivity(Intent(this, BusinessManageActivity::class.java))
-                    finish()
-                    true
-                }
-                R.id.nav_business_profile -> true
-                else -> false
+            if (item.itemId == R.id.nav_business_profile) return@setOnItemSelectedListener true
+
+            val intent = when (item.itemId) {
+                R.id.nav_business_dashboard -> Intent(this, BusinessDashboardActivity::class.java)
+                R.id.nav_business_inventory -> Intent(this, BusinessInventoryActivity::class.java)
+                R.id.nav_business_orders -> Intent(this, BusinessOrdersActivity::class.java)
+                R.id.nav_business_manage -> Intent(this, BusinessManageActivity::class.java)
+                else -> null
             }
+            intent?.let {
+                startActivity(it)
+                finish()
+            }
+            true
         }
     }
 }

@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.*
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FieldValue
 
 class LocationService : Service() {
 
@@ -19,6 +20,11 @@ class LocationService : Service() {
     private lateinit var locationCallback: LocationCallback
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
+
+    companion object {
+        private const val CHANNEL_ID = "location_channel"
+        private const val NOTIFICATION_ID = 1
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -28,26 +34,40 @@ class LocationService : Service() {
             override fun onLocationResult(lr: LocationResult) {
                 val location = lr.lastLocation ?: return
                 updateFirestore(location.latitude, location.longitude)
+                Log.d("LocationService", "New Location: ${location.latitude}, ${location.longitude}")
             }
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Ensure user is still logged in before starting
+        if (auth.currentUser == null) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         createChannel()
 
-        val notification = NotificationCompat.Builder(this, "location_channel")
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("iLutoMo Tracking Active")
-            .setContentText("Updating your location for active orders...")
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentText("Your live location is shared with the seller.")
+            .setSmallIcon(R.mipmap.ic_launcher) // Ensure this icon exists
             .setOngoing(true)
+            .setCategory(Notification.CATEGORY_SERVICE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        // Required for Android 14 (API 34) and above: specify service type
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-        } else {
-            startForeground(1, notification)
+        // Handle Android 14+ Foreground Service types (MUST match Manifest)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            Log.e("LocationService", "Failed to start foreground service: ${e.message}")
         }
 
         requestUpdates()
@@ -55,9 +75,10 @@ class LocationService : Service() {
     }
 
     private fun requestUpdates() {
-        // High accuracy every 10 seconds, faster if another app is already requesting it
-        val req = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000)
-            .setMinUpdateIntervalMillis(5000)
+        val req = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000) // 10 seconds
+            .setMinUpdateIntervalMillis(5000) // 5 seconds
+            .setMinUpdateDistanceMeters(2f)   // Reduced sensitivity to save battery (2 meters)
+            .setWaitForAccurateLocation(false)
             .build()
 
         try {
@@ -69,30 +90,31 @@ class LocationService : Service() {
     }
 
     private fun updateFirestore(lat: Double, lng: Double) {
-        val userId = auth.currentUser?.uid
-        if (userId != null) {
-            val updates = mapOf(
-                "latitude" to lat,
-                "longitude" to lng,
-                "lastLocationUpdate" to com.google.firebase.Timestamp.now()
-            )
-            db.collection("users").document(userId).update(updates)
-                .addOnFailureListener { e ->
-                    Log.e("LocationService", "Firestore update failed: ${e.message}")
-                }
-        } else {
-            // If user logged out but service is still running, stop it
-            stopSelf()
-        }
+        val userId = auth.currentUser?.uid ?: return
+
+        val updates = hashMapOf(
+            "latitude" to lat,
+            "longitude" to lng,
+            "lastLocationUpdate" to FieldValue.serverTimestamp(),
+            "isTrackingActive" to true
+        )
+
+        // Using "users" collection as per your logic
+        db.collection("users").document(userId).update(updates as Map<String, Any>)
+            .addOnFailureListener { e ->
+                Log.e("LocationService", "Firestore update failed: ${e.message}")
+            }
     }
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val chan = NotificationChannel(
-                "location_channel",
-                "Order Tracking",
+                CHANNEL_ID,
+                "Live Order Tracking",
                 NotificationManager.IMPORTANCE_LOW
-            )
+            ).apply {
+                description = "Used for showing live location tracking status"
+            }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(chan)
         }
@@ -101,8 +123,16 @@ class LocationService : Service() {
     override fun onBind(i: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        // Essential to stop tracking when service is destroyed to save battery
+        // CLEANUP: Important to stop location requests to save battery
         fusedLocationClient.removeLocationUpdates(locationCallback)
+
+        // Optional: Mark tracking as inactive in Firestore when service is stopped
+        val userId = auth.currentUser?.uid
+        if (userId != null) {
+            db.collection("users").document(userId).update("isTrackingActive", false)
+        }
+
         super.onDestroy()
+        Log.d("LocationService", "Service Destroyed and Updates Stopped")
     }
 }
