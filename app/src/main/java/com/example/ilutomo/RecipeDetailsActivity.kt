@@ -32,6 +32,7 @@ class RecipeDetailsActivity : AppCompatActivity() {
         binding = ActivityRecipeDetailsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Ensure your RecipeAdapter uses the key "RECIPE"
         val recipe = intent.getSerializableExtra("RECIPE") as? Recipe
 
         if (recipe == null) {
@@ -40,8 +41,6 @@ class RecipeDetailsActivity : AppCompatActivity() {
             finish()
             return
         }
-
-        Log.d("PANTRY_DEBUG", "Recipe loaded: ${recipe.title}")
 
         binding.detailToolbar.setNavigationOnClickListener { finish() }
         binding.fabAddToPantry.setOnClickListener { addToPantry(recipe) }
@@ -71,7 +70,10 @@ class RecipeDetailsActivity : AppCompatActivity() {
                     val lat = details.child("latitude").value?.toString()?.toDoubleOrNull() ?: 0.0
                     val lng = details.child("longitude").value?.toString()?.toDoubleOrNull() ?: 0.0
                     val distance = calculateDistance(userLat, userLng, lat, lng)
-                    businessDetailsMap[bizName] = BusinessLocation(details.child("address").value?.toString() ?: "", lat, lng, distance)
+                    businessDetailsMap[bizName] = BusinessLocation(
+                        details.child("address").value?.toString() ?: "",
+                        lat, lng, distance
+                    )
 
                     val items = mutableListOf<InventoryItem>()
                     bizSnapshot.child("inventory").children.forEach { itemSnap ->
@@ -96,36 +98,51 @@ class RecipeDetailsActivity : AppCompatActivity() {
     private fun setupUI(recipe: Recipe) {
         binding.tvDetailTitle.text = recipe.title
         binding.tvDetailDescription.text = recipe.description
+
         val imageResId = resources.getIdentifier(recipe.imageResourceName, "drawable", packageName)
         binding.ivRecipeDetailImage.setImageResource(if (imageResId != 0) imageResId else R.drawable.placeholder_food)
 
+        // --- POPULATE NUTRITION FACTS ---
+        val macros = recipe.macros
+        if (macros != null) {
+            binding.tvDetailCalories.text = macros["Calories"] ?: "0"
+            binding.tvDetailProtein.text = "${macros["Protein"] ?: "0"}g"
+            binding.tvDetailCarbs.text = "${macros["Carbs"] ?: "0"}g"
+            binding.tvDetailSugar.text = "${macros["Sugar"] ?: "0"}g"
+            binding.tvDetailSodium.text = "${macros["Sodium"] ?: "0"}mg"
+        }
+
+        // --- POPULATE INGREDIENTS ---
         binding.llIngredientsList.removeAllViews()
         recipe.ingredients?.forEach { (name, amount) ->
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 8, 0, 8) }
-            val tvName = TextView(this).apply { text = "• $name ($amount)"; setTextColor(Color.BLACK); layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, 8, 0, 8)
+            }
+            val tvName = TextView(this).apply {
+                text = "• $name ($amount)"
+                setTextColor(Color.BLACK)
+                layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+            }
             row.addView(tvName)
             binding.llIngredientsList.addView(row)
         }
-        binding.tvStepsList.text = recipe.steps?.mapIndexed { i, s -> "${i + 1}. $s" }?.joinToString("\n\n") ?: ""
+
+        // --- POPULATE STEPS ---
+        binding.tvStepsList.text = recipe.steps?.mapIndexed { i, s ->
+            "${i + 1}. $s"
+        }?.joinToString("\n\n") ?: "No cooking steps provided."
     }
 
     private fun addToPantry(recipe: Recipe) {
-        val uid = auth.currentUser?.uid
-        if (uid == null) {
-            Log.e("PANTRY_DEBUG", "User is NOT logged in!")
-            return
-        }
-
+        val uid = auth.currentUser?.uid ?: return
         val pantryRef = database.child("Users").child(uid).child("Pantry")
         val ingredients = recipe.ingredients
 
         if (ingredients.isNullOrEmpty()) {
-            Log.e("PANTRY_DEBUG", "Ingredients map is EMPTY for recipe: ${recipe.title}")
-            Toast.makeText(this, "No ingredients found for this recipe", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "No ingredients found", Toast.LENGTH_SHORT).show()
             return
         }
-
-        Log.d("PANTRY_DEBUG", "Attempting to add ${ingredients.size} items to Users/$uid/Pantry")
 
         ingredients.forEach { (name, amount) ->
             val key = pantryRef.push().key ?: return@forEach
@@ -138,8 +155,6 @@ class RecipeDetailsActivity : AppCompatActivity() {
                 isChecked = true
             )
             pantryRef.child(key).setValue(pantryItem)
-                .addOnSuccessListener { Log.d("PANTRY_DEBUG", "Successfully added: $name") }
-                .addOnFailureListener { Log.e("PANTRY_DEBUG", "Failed to add $name: ${it.message}") }
         }
         Toast.makeText(this, "Added to Pantry!", Toast.LENGTH_SHORT).show()
     }

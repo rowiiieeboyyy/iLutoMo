@@ -2,8 +2,6 @@ package com.example.ilutomo
 
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
-import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SearchView
@@ -30,10 +28,22 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var recipeAdapter: RecipeAdapter
 
     private var userDiet = "Standard"
+    private var activeAllergens = mutableListOf<String>()
+    private var customAllergen = ""
     private var searchQuery = ""
+
+    // Strictly defined ranges fetched from ProfileActivity
+    private var budgetMin = 0.0
+    private var budgetMax = Double.MAX_VALUE
+    private var proteinMin = 0.0
+    private var proteinMax = Double.MAX_VALUE
+    private var carbsMin = 0.0
+    private var carbsMax = Double.MAX_VALUE
+    private var sugarMin = 0.0
+    private var sugarMax = Double.MAX_VALUE
+
     private var userLat: Double = 0.0
     private var userLng: Double = 0.0
-    private var bMax = 10000
 
     data class BusinessLocation(val lat: Double, val lng: Double, var distance: Double = 0.0)
 
@@ -65,19 +75,12 @@ class HomeActivity : AppCompatActivity() {
 
     private fun fetchUserLocationAndData() {
         val uid = auth.currentUser?.uid ?: return
-
-        // Ensure "users" matches the collection name in your EditProfileActivity
         firestore.collection("users").document(uid).get()
             .addOnSuccessListener { document ->
                 if (document.exists()) {
-                    // FIX: Changed from "firstName" to "name" to match EditProfileActivity
                     val fullName = document.getString("name") ?: "User"
-
-                    // Optional: If you only want the first name (e.g. "Kaycie" instead of "Kaycie Ignacio")
                     val firstName = fullName.split(" ").firstOrNull() ?: fullName
-
                     updateWelcomeMessage(firstName)
-
                     userLat = document.getDouble("latitude") ?: 0.0
                     userLng = document.getDouble("longitude") ?: 0.0
                 }
@@ -96,8 +99,6 @@ class HomeActivity : AppCompatActivity() {
             in 12..16 -> "Good Afternoon"
             else -> "Good Evening"
         }
-
-        // Updates the TextView we added to activity_home.xml
         binding.tvWelcome.text = "$greeting, $name!"
     }
 
@@ -111,7 +112,6 @@ class HomeActivity : AppCompatActivity() {
                     val details = businessSnapshot.child("details")
                     val lat = details.child("latitude").value?.toString()?.toDoubleOrNull() ?: 0.0
                     val lng = details.child("longitude").value?.toString()?.toDoubleOrNull() ?: 0.0
-
                     val distance = calculateDistance(userLat, userLng, lat, lng)
                     businessDetailsMap[businessName] = BusinessLocation(lat, lng, distance)
 
@@ -131,10 +131,8 @@ class HomeActivity : AppCompatActivity() {
         val r = 6371.0
         val dLat = Math.toRadians(lat2 - lat1)
         val dLon = Math.toRadians(lon2 - lon1)
-        val a = sin(dLat / 2) * sin(dLat / 2) +
-                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-                sin(dLon / 2) * sin(dLon / 2)
-        return r * (2 * atan2(sqrt(a), sqrt(1 - a)))
+        val a = sin(dLat / 2).pow(2) + cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2).pow(2)
+        return r * 2 * atan2(sqrt(a), sqrt(1 - a))
     }
 
     private fun setupSearch() {
@@ -149,9 +147,15 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupRecyclerView() {
-        recipeAdapter = RecipeAdapter(filteredList) { r -> saveSelection(r) }
+        recipeAdapter = RecipeAdapter(filteredList) { r -> saveRecipeToUserList(r) }
         binding.rvHomeRecipes.layoutManager = GridLayoutManager(this, 2)
         binding.rvHomeRecipes.adapter = recipeAdapter
+    }
+
+    private fun saveRecipeToUserList(recipe: Recipe) {
+        val uid = auth.currentUser?.uid ?: return
+        database.child("Users").child(uid).child("AddedRecipes").child(recipe.id).setValue(recipe)
+            .addOnSuccessListener { Toast.makeText(this, "${recipe.title} added!", Toast.LENGTH_SHORT).show() }
     }
 
     private fun fetchPreferences() {
@@ -161,7 +165,29 @@ class HomeActivity : AppCompatActivity() {
                 override fun onDataChange(s: DataSnapshot) {
                     if (s.exists()) {
                         userDiet = s.child("dietary_type").value?.toString() ?: "Standard"
-                        bMax = s.child("budget_max").value?.toString()?.toDouble()?.toInt() ?: 10000
+
+                        // Budget Ranges
+                        budgetMin = s.child("budget_min").value?.toString()?.toDoubleOrNull() ?: 0.0
+                        budgetMax = s.child("budget_max").value?.toString()?.toDoubleOrNull() ?: Double.MAX_VALUE
+
+                        // Protein Ranges
+                        proteinMin = s.child("protein_min").value?.toString()?.toDoubleOrNull() ?: 0.0
+                        proteinMax = s.child("protein_max").value?.toString()?.toDoubleOrNull() ?: Double.MAX_VALUE
+
+                        // Carbs Ranges
+                        carbsMin = s.child("carbs_min").value?.toString()?.toDoubleOrNull() ?: 0.0
+                        carbsMax = s.child("carbs_max").value?.toString()?.toDoubleOrNull() ?: Double.MAX_VALUE
+
+                        // Sugar Ranges
+                        sugarMin = s.child("sugar_min").value?.toString()?.toDoubleOrNull() ?: 0.0
+                        sugarMax = s.child("sugar_max").value?.toString()?.toDoubleOrNull() ?: Double.MAX_VALUE
+
+                        activeAllergens.clear()
+                        val algNode = s.child("allergens")
+                        if (algNode.child("Soy").value == true) activeAllergens.add("Soy")
+                        if (algNode.child("Gluten").value == true) activeAllergens.add("Gluten")
+                        if (algNode.child("Dairy").value == true) activeAllergens.add("Dairy")
+                        customAllergen = algNode.child("Others_Value").value?.toString()?.lowercase() ?: ""
                     }
                     loadRecipes()
                 }
@@ -179,35 +205,35 @@ class HomeActivity : AppCompatActivity() {
                     if (child.key?.startsWith("recipe_") == true) {
                         val r = child.getValue(Recipe::class.java) ?: continue
                         r.id = child.key!!
+                        r.category = child.child("category").value?.toString() ?: "Standard"
 
-                        // Correctly pull category from nested 'allergens' folder
-                        r.category = child.child("allergens").child("category").value?.toString() ?: "Standard"
-                        r.title = child.child("title").value?.toString() ?: r.title
+                        var pro = 0.0; var carb = 0.0; var sug = 0.0
+                        var totalPrice = 0.0
 
-                        var cal = 0.0; var pro = 0.0; var carb = 0.0
                         r.ingredients?.forEach { (name, amt) ->
                             val qty = amt.toString().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0
                             val lib = ingredientLibrary[name]
                             if (lib != null) {
                                 val factor = if (name.contains("Egg", true)) qty else (qty / 50.0)
-                                cal += factor * (lib.child("cal").getValue(Double::class.java) ?: 0.0)
                                 pro += factor * (lib.child("pro").getValue(Double::class.java) ?: 0.0)
                                 carb += factor * (lib.child("carb").getValue(Double::class.java) ?: 0.0)
+                                sug += factor * (lib.child("sug").getValue(Double::class.java) ?: 0.0)
                             }
-                        }
-
-                        var totalPrice = 0.0
-                        r.ingredients?.keys?.forEach { ingName ->
                             for (biz in sortedByDist) {
-                                val matches = inventoryMap[biz.key]?.filter { it.ingredient.equals(ingName, true) }
+                                val matches = inventoryMap[biz.key]?.filter { it.ingredient.equals(name, true) }
                                 if (!matches.isNullOrEmpty()) {
                                     totalPrice += matches.minOf { it.price }
                                     break
                                 }
                             }
                         }
+
                         r.calculatedPrice = totalPrice
-                        r.macros = mapOf("Calories" to "${cal.toInt()}", "Protein" to "${pro.toInt()}g", "Carbs" to "${carb.toInt()}g")
+                        r.macros = mapOf(
+                            "Protein" to "${pro.toInt()}",
+                            "Carbs" to "${carb.toInt()}",
+                            "Sugar" to "${sug.toInt()}"
+                        )
                         allRecipes.add(r)
                     }
                 }
@@ -219,20 +245,47 @@ class HomeActivity : AppCompatActivity() {
 
     private fun applyFilters() {
         filteredList.clear()
+
         val baseFiltered = allRecipes.filter { r ->
-            val matchesSearch = r.title.contains(searchQuery, ignoreCase = true)
-            val matchesDiet = userDiet == "Standard" || r.category.equals(userDiet, ignoreCase = true)
-            matchesSearch && matchesDiet && r.calculatedPrice <= bMax
+            // 1. Dietary Safety Check
+            if (!isRecipeSafeForUser(r)) return@filter false
+
+            // 2. Search Text
+            if (searchQuery.isNotEmpty() && !r.title.contains(searchQuery, ignoreCase = true)) return@filter false
+
+            // 3. Extract Macro/Price Values
+            val pVal = r.macros?.get("Protein")?.toDoubleOrNull() ?: 0.0
+            val cVal = r.macros?.get("Carbs")?.toDoubleOrNull() ?: 0.0
+            val sVal = r.macros?.get("Sugar")?.toDoubleOrNull() ?: 0.0
+            val price = r.calculatedPrice
+
+            // 4. THE STRICT "ON POINT" FILTERING
+            // Using Kotlin range (in min..max) ensures strict boundaries.
+
+            val inBudget = price in budgetMin..budgetMax
+            val inProtein = pVal in proteinMin..proteinMax
+
+            // For example: if range is 25-30, anything 24 or 31 is hidden.
+            val inCarbs = cVal in carbsMin..carbsMax
+            val inSugar = sVal in sugarMin..sugarMax
+
+            // Result: All 4 conditions must be true
+            inBudget && inProtein && inCarbs && inSugar
         }
+
         filteredList.addAll(baseFiltered)
         recipeAdapter.notifyDataSetChanged()
     }
 
-    private fun saveSelection(r: Recipe) {
-        val uid = auth.currentUser?.uid ?: return
-        database.child("Users").child(uid).child("SelectedRecipes")
-            .child(r.title.replace(" ", "_")).setValue(r)
-            .addOnSuccessListener { Toast.makeText(this, "${r.title} saved!", Toast.LENGTH_SHORT).show() }
+    private fun isRecipeSafeForUser(recipe: Recipe): Boolean {
+        if (userDiet != "Standard" && !recipe.category.equals(userDiet, ignoreCase = true)) return false
+
+        recipe.ingredients?.keys?.forEach { ing ->
+            val ingLower = ing.lowercase()
+            if (activeAllergens.any { ingLower.contains(it.lowercase()) }) return false
+            if (customAllergen.isNotBlank() && customAllergen != "null" && ingLower.contains(customAllergen)) return false
+        }
+        return true
     }
 
     private fun setupBottomNavigation() {
