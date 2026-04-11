@@ -58,7 +58,9 @@ data class PantryIngredient(
     var brandName: String = "",
     var size: String = "",
     var businessName: String = "",
-    var imageUrl: String = ""
+    var imageUrl: String = "",
+    // --- ADDED FOR PORTION/ITEM COUNT ---
+    var count: Int = 1
 ) : Serializable
 
 /**

@@ -29,8 +29,6 @@ class OrderConfirmationActivity : AppCompatActivity() {
     private var storeName: String = ""
     private var storeUid: String = ""
     private var selectedItems = ArrayList<PantryIngredient>()
-
-    // Variable to track the chosen pickup time
     private var finalPickupTime: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,7 +50,6 @@ class OrderConfirmationActivity : AppCompatActivity() {
         tvAddress.text = "$storeName\nTeresa, Rizal"
         tvStatus.text = "Order Status : Pending"
 
-        // Set initial default pickup time (30 mins from now)
         val calendar = Calendar.getInstance()
         calendar.add(Calendar.MINUTE, 30)
         finalPickupTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(calendar.time)
@@ -63,10 +60,7 @@ class OrderConfirmationActivity : AppCompatActivity() {
         tvPickupTime.setOnClickListener { showTimePicker() }
         findViewById<ImageView>(R.id.order_back_arrow)?.setOnClickListener { finish() }
         btnCancel.setOnClickListener { finish() }
-
-        btnPlaceOrder.setOnClickListener {
-            executeFirebaseSave()
-        }
+        btnPlaceOrder.setOnClickListener { executeFirebaseSave() }
     }
 
     private fun displayDraftItems() {
@@ -86,16 +80,46 @@ class OrderConfirmationActivity : AppCompatActivity() {
         }
     }
 
+    private fun createItemCard(item: PantryIngredient): CardView {
+        val card = CardView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(8, 8, 8, 8) }
+            radius = 16f
+            cardElevation = 4f
+        }
+        val inner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(16, 16, 16, 16)
+        }
+        inner.addView(View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(-1, 180)
+            setBackgroundColor(Color.parseColor("#F5F5F5"))
+        })
+
+        // FIXED: Now displays name AND quantity (e.g., "Egg x2")
+        inner.addView(TextView(this).apply {
+            text = "${item.name} x${item.count}"
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+        })
+
+        inner.addView(TextView(this).apply {
+            text = "₱${"%.2f".format(item.price)}"
+            textSize = 16f
+            setTextColor(Color.parseColor("#2E7D32"))
+        })
+        card.addView(inner)
+        return card
+    }
+
     private fun executeFirebaseSave() {
         val uid = auth.currentUser?.uid ?: return
         if (storeUid.isEmpty()) return
 
         btnPlaceOrder.isEnabled = false
-
         val orderRef = database.child("BusinessOrders").child(storeUid).push()
         val orderId = orderRef.key ?: return
 
-        // Create the Order object using finalPickupTime
+        // The totalAmount sumOf already uses it.price, which was scaled in PantryActivity
         val orderData = Order(
             id = orderId,
             userId = uid,
@@ -106,7 +130,7 @@ class OrderConfirmationActivity : AppCompatActivity() {
             timestamp = System.currentTimeMillis(),
             status = "Pending",
             pickupAddress = "Teresa, Rizal",
-            pickupTime = finalPickupTime // Uses the updated variable
+            pickupTime = finalPickupTime
         )
 
         val updates = HashMap<String, Any?>()
@@ -132,35 +156,8 @@ class OrderConfirmationActivity : AppCompatActivity() {
         val c = Calendar.getInstance()
         TimePickerDialog(this, { _, h, m ->
             val cal = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, h); set(Calendar.MINUTE, m) }
-
-            // Critical Step: Update the variable AND the UI text
             finalPickupTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(cal.time)
             tvPickupTime.text = "Pick up at\n$finalPickupTime"
-
         }, c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), false).show()
-    }
-
-    private fun createItemCard(item: PantryIngredient): CardView {
-        val card = CardView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(8, 8, 8, 8) }
-            radius = 16f
-            cardElevation = 4f
-        }
-        val inner = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(16, 16, 16, 16)
-        }
-        inner.addView(View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(-1, 180)
-            setBackgroundColor(Color.parseColor("#F5F5F5"))
-        })
-        inner.addView(TextView(this).apply {
-            text = item.name; textSize = 14f; setTypeface(null, Typeface.BOLD)
-        })
-        inner.addView(TextView(this).apply {
-            text = "₱${"%.2f".format(item.price)}"; textSize = 16f; setTextColor(Color.parseColor("#2E7D32"))
-        })
-        card.addView(inner)
-        return card
     }
 }

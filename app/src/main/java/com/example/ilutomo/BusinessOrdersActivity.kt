@@ -206,11 +206,11 @@ class BusinessOrdersActivity : AppCompatActivity() {
             val pickup = if (order.pickupTime.isNullOrEmpty()) "ASAP" else order.pickupTime
             holder.tvDate.text = "Placed: $orderDate\nPickup: $pickup"
 
+            // UPDATED: Removed (amount) and added xCount logic so the store knows exact quantities
             holder.tvDetails.text = order.items.joinToString("\n") {
-                "• ${it.name} (${it.amount})"
+                "• ${it.name} x${it.count}"
             }
 
-            // Reset visibilities first
             holder.btnAccept.visibility = View.GONE
             holder.btnDecline.visibility = View.GONE
             holder.btnComplete.visibility = View.GONE
@@ -222,7 +222,6 @@ class BusinessOrdersActivity : AppCompatActivity() {
                 "Pending" -> {
                     holder.btnAccept.visibility = View.VISIBLE
                     holder.btnDecline.visibility = View.VISIBLE
-
                     holder.btnAccept.setOnClickListener { onStatusUpdate(order, "Preparing Ingredients") }
                     holder.btnDecline.setOnClickListener {
                         AlertDialog.Builder(holder.itemView.context)
@@ -234,21 +233,16 @@ class BusinessOrdersActivity : AppCompatActivity() {
                     }
                 }
                 "Preparing Ingredients" -> {
-                    // Track button is now visible while preparing
                     holder.btnTrack.visibility = View.VISIBLE
                     holder.btnComplete.visibility = View.VISIBLE
                     holder.btnComplete.text = "Ready for Pickup"
                     holder.btnComplete.setOnClickListener { onStatusUpdate(order, "Ready for Pickup") }
                 }
                 "Ready for Pickup" -> {
-                    // Track button remains visible when ready
                     holder.btnTrack.visibility = View.VISIBLE
                     holder.btnComplete.visibility = View.VISIBLE
                     holder.btnComplete.text = "Mark Completed"
                     holder.btnComplete.setOnClickListener { onStatusUpdate(order, "Completed") }
-                }
-                else -> {
-                    // No buttons for Declined or Completed status
                 }
             }
         }

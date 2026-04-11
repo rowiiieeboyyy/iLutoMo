@@ -9,11 +9,7 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.StrikethroughSpan
 import android.util.Log
 import android.view.View
-import android.widget.Button
-import android.widget.ImageButton
-import android.widget.LinearLayout
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -41,7 +37,7 @@ class RecipesActivity : AppCompatActivity() {
         // Initialize Views
         tvNeeded = findViewById(R.id.tvNeededList)
         rvAvailable = findViewById(R.id.rvAvailableIngredients)
-        tvServings = findViewById(R.id.tvRecipeServings) // Ensure this ID exists in activity_recipes.xml
+        tvServings = findViewById(R.id.tvRecipeServings)
 
         val btnChoose = findViewById<Button>(R.id.btnChooseRecipe)
         val btnMacros = findViewById<Button>(R.id.btnViewMacros)
@@ -77,22 +73,10 @@ class RecipesActivity : AppCompatActivity() {
         bottomNav.selectedItemId = R.id.nav_recipes
         bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
-                R.id.nav_home -> {
-                    startActivity(Intent(this, HomeActivity::class.java))
-                    finish()
-                    true
-                }
+                R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); finish(); true }
                 R.id.nav_recipes -> true
-                R.id.nav_pantry -> {
-                    startActivity(Intent(this, PantryActivity::class.java))
-                    finish()
-                    true
-                }
-                R.id.nav_profile -> {
-                    startActivity(Intent(this, ProfileActivity::class.java))
-                    finish()
-                    true
-                }
+                R.id.nav_pantry -> { startActivity(Intent(this, PantryActivity::class.java)); finish(); true }
+                R.id.nav_profile -> { startActivity(Intent(this, ProfileActivity::class.java)); finish(); true }
                 else -> false
             }
         }
@@ -119,7 +103,7 @@ class RecipesActivity : AppCompatActivity() {
                 }
             }
             override fun onCancelled(error: DatabaseError) {
-                Log.e("RecipesActivity", "Error: ${error.message}")
+                Log.e("RecipesActivity", "Error loading library: ${error.message}")
             }
         })
     }
@@ -133,17 +117,53 @@ class RecipesActivity : AppCompatActivity() {
                 recipe.id = snap.key ?: ""
                 addedRecipes.add(recipe)
             }
-            if (addedRecipes.isEmpty()) return@addOnSuccessListener
 
+            if (addedRecipes.isEmpty()) {
+                Toast.makeText(this, "No recipes in your list!", Toast.LENGTH_LONG).show()
+                return@addOnSuccessListener
+            }
+
+            addedRecipes.sortBy { it.title }
             val titles = addedRecipes.map { it.title }.toTypedArray()
-            AlertDialog.Builder(this).setTitle("Select Recipe").setItems(titles) { _, which ->
-                val selected = addedRecipes[which]
-                currentRecipe = selected
-                btnChoose.text = selected.title
-                tvServings.text = selected.servings.toString()
-                loadRecipeDataIntoUI(selected)
-            }.show()
+
+            AlertDialog.Builder(this)
+                .setTitle("Select Recipe")
+                .setItems(titles) { _, which ->
+                    val selected = addedRecipes[which]
+                    currentRecipe = selected
+                    btnChoose.text = selected.title
+                    tvServings.text = selected.servings.toString()
+                    loadRecipeDataIntoUI(selected)
+                }
+                .setNeutralButton("Delete") { _, _ -> showDeleteRecipeDialog(addedRecipes, btnChoose) }
+                .setNegativeButton("Cancel", null)
+                .show()
         }
+    }
+
+    private fun showDeleteRecipeDialog(recipes: List<Recipe>, btnChoose: Button) {
+        val uid = auth.currentUser?.uid ?: return
+        val titles = recipes.map { it.title }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("Remove Recipe")
+            .setItems(titles) { _, which ->
+                val selected = recipes[which]
+                database.child("Users").child(uid).child("AddedRecipes")
+                    .child(selected.id).removeValue()
+                    .addOnSuccessListener {
+                        Toast.makeText(this, "Removed ${selected.title}", Toast.LENGTH_SHORT).show()
+                        if (currentRecipe?.id == selected.id) {
+                            currentRecipe = null
+                            btnChoose.text = "Select from your added recipes"
+                            tvServings.text = "1"
+                            currentIngredients.clear()
+                            updateUI()
+                        }
+                    }
+            }
+            .setNegativeButton("Back", null)
+            .show()
     }
 
     private fun loadRecipeDataIntoUI(recipe: Recipe) {
@@ -198,11 +218,17 @@ class RecipesActivity : AppCompatActivity() {
         val dialog = AlertDialog.Builder(this).setView(dialogView).create()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
 
+        val tvTitle = dialogView.findViewById<TextView>(R.id.dialogTitle)
         val tvContent = dialogView.findViewById<TextView>(R.id.dialogContent)
         val tvTotal = dialogView.findViewById<TextView>(R.id.tvTotalValue)
-        val multiplier = recipe.servings
+        val llTotal = dialogView.findViewById<LinearLayout>(R.id.llTotalSection)
+        val btnCloseX = dialogView.findViewById<ImageButton>(R.id.btnCloseDialog)
+
+        tvTitle.text = "Detailed Nutrition"
+        llTotal.visibility = View.VISIBLE
 
         val contentBuilder = StringBuilder()
+        val multiplier = recipe.servings
         var totalCals = 0.0; var totalCarbs = 0.0; var totalProt = 0.0; var totalSug = 0.0; var totalPrice = 0.0
 
         recipe.ingredients?.forEach { (fullName, amount) ->
@@ -215,10 +241,10 @@ class RecipesActivity : AppCompatActivity() {
                 val kcal = factor * (entry["cal"] ?: 0.0)
                 val carbs = factor * (entry["carb"] ?: 0.0)
                 val prot = factor * (entry["pro"] ?: 0.0)
-                val sugar = factor * (entry["sugar"] ?: 0.0)
                 val price = factor * (entry["price"] ?: 0.0)
 
-                totalCals += kcal; totalCarbs += carbs; totalProt += prot; totalSug += sugar; totalPrice += price
+                totalCals += kcal; totalCarbs += carbs; totalProt += prot; totalPrice += price
+
                 contentBuilder.append("• $fullName (${scaleAmount(amount.toString(), multiplier)})\n")
                 contentBuilder.append("   ${kcal.toInt()} kcal | P: ${prot.toInt()}g | C: ${carbs.toInt()}g\n\n")
             }
@@ -227,7 +253,7 @@ class RecipesActivity : AppCompatActivity() {
         tvContent.text = contentBuilder.toString().trim()
         tvTotal.text = "Total: ${totalCals.toInt()} kcal | ₱${"%.2f".format(totalPrice)}\nP: ${totalProt.toInt()}g | C: ${totalCarbs.toInt()}g"
 
-        dialogView.findViewById<Button>(R.id.btnDialogDone).setOnClickListener { dialog.dismiss() }
+        btnCloseX.setOnClickListener { dialog.dismiss() }
         dialog.show()
     }
 
@@ -235,9 +261,19 @@ class RecipesActivity : AppCompatActivity() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_custom_info, null)
         val dialog = AlertDialog.Builder(this).setView(dialogView).create()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        val steps = recipe.steps?.mapIndexed { i, s -> "${i + 1}. $s" }?.joinToString("\n\n") ?: "No steps."
-        dialogView.findViewById<TextView>(R.id.dialogContent).text = steps
-        dialogView.findViewById<Button>(R.id.btnDialogDone).setOnClickListener { dialog.dismiss() }
+
+        val tvTitle = dialogView.findViewById<TextView>(R.id.dialogTitle)
+        val tvContent = dialogView.findViewById<TextView>(R.id.dialogContent)
+        val llTotal = dialogView.findViewById<LinearLayout>(R.id.llTotalSection)
+        val btnCloseX = dialogView.findViewById<ImageButton>(R.id.btnCloseDialog)
+
+        tvTitle.text = "${recipe.title} - Steps"
+        llTotal.visibility = View.GONE
+
+        val steps = recipe.steps?.mapIndexed { i, s -> "${i + 1}. $s" }?.joinToString("\n\n") ?: "No steps available."
+        tvContent.text = steps
+
+        btnCloseX.setOnClickListener { dialog.dismiss() }
         dialog.show()
     }
 
@@ -247,14 +283,33 @@ class RecipesActivity : AppCompatActivity() {
         val multiplier = recipe.servings
         val selected = currentIngredients.filter { it.isChecked }
 
+        if (selected.isEmpty()) {
+            Toast.makeText(this, "Check ingredients first", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         val pantryRef = database.child("Users").child(uid).child("Pantry")
         selected.forEach { ing ->
             val key = pantryRef.push().key ?: return@forEach
-            val scaledAmt = scaleAmount(ing.amount, multiplier)
-            val item = mapOf("id" to key, "name" to ing.name, "amount" to scaledAmt, "recipeTitle" to recipe.title, "isChecked" to true)
+
+            val cleanName = ing.name.split("(")[0].trim()
+            val entry = ingredientLibrary.entries.find { it.key.equals(cleanName, true) }?.value
+            val qtyNumeric = (ing.amount.replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 1.0) * multiplier
+            val factor = if (cleanName.contains("Egg", true)) qtyNumeric else (qtyNumeric / 50.0)
+            val calculatedPrice = factor * (entry?.get("price") ?: 0.0)
+
+            val item = mapOf(
+                "id" to key,
+                "name" to ing.name,
+                "amount" to ing.amount,
+                "recipeTitle" to recipe.title,
+                "isChecked" to true,
+                "count" to multiplier,
+                "price" to calculatedPrice
+            )
             pantryRef.child(key).setValue(item)
         }
-        Toast.makeText(this, "Added for $multiplier servings!", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Added to Pantry for $multiplier servings!", Toast.LENGTH_SHORT).show()
         startActivity(Intent(this, PantryActivity::class.java))
     }
 }

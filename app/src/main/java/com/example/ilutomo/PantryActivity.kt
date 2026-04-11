@@ -1,8 +1,10 @@
 package com.example.ilutomo
 
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
+import android.view.Gravity
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -41,51 +43,6 @@ class PantryActivity : AppCompatActivity() {
         loadPantryIngredients()
     }
 
-    private fun fetchStoresAndShowDialog() {
-        val selectedItems = pantryIngredients.filter { it.isChecked }
-        if (selectedItems.isEmpty()) {
-            Toast.makeText(this, "Select items first!", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        database.child("Businesses").addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val storeNames = mutableListOf<String>()
-                val storeUids = mutableListOf<String>()
-
-                for (bizSnapshot in snapshot.children) {
-                    val name = bizSnapshot.child("details").child("businessName").value?.toString()
-                    val uid = bizSnapshot.key
-                    if (name != null && uid != null) {
-                        storeNames.add(name)
-                        storeUids.add(uid)
-                    }
-                }
-
-                if (storeNames.isEmpty()) {
-                    Toast.makeText(this@PantryActivity, "No stores available", Toast.LENGTH_SHORT).show()
-                } else {
-                    AlertDialog.Builder(this@PantryActivity)
-                        .setTitle("Select Store to Pick Up")
-                        .setItems(storeNames.toTypedArray()) { _, which ->
-                            navigateToConfirmation(storeNames[which], storeUids[which], selectedItems)
-                        }
-                        .setNegativeButton("Cancel", null)
-                        .show()
-                }
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        })
-    }
-
-    private fun navigateToConfirmation(businessName: String, businessUid: String, selectedItems: List<PantryIngredient>) {
-        val intent = Intent(this, OrderConfirmationActivity::class.java)
-        intent.putExtra("STORE_NAME", businessName)
-        intent.putExtra("STORE_UID", businessUid)
-        intent.putExtra("SELECTED_ITEMS", ArrayList(selectedItems))
-        startActivity(intent)
-    }
-
     private fun loadPantryIngredients() {
         val uid = auth.currentUser?.uid ?: return
         database.child("Users").child(uid).child("Pantry").addValueEventListener(object : ValueEventListener {
@@ -107,36 +64,90 @@ class PantryActivity : AppCompatActivity() {
     private fun updateUI(groupedMap: Map<String, List<PantryIngredient>>) {
         llPantryList.removeAllViews()
         for ((title, items) in groupedMap) {
-            val tv = TextView(this).apply {
+            val tvHeader = TextView(this).apply {
                 text = title; textSize = 18f; setTypeface(null, Typeface.BOLD); setPadding(0, 20, 0, 10)
+                setTextColor(Color.parseColor("#1B3022"))
             }
-            llPantryList.addView(tv)
+            llPantryList.addView(tvHeader)
+
             for (ing in items) {
-                val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 10, 0, 10) }
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, 10, 0, 10)
+                }
+
                 val cb = CheckBox(this).apply {
                     isChecked = ing.isChecked
                     setOnCheckedChangeListener { _, isChecked ->
-                        ing.isChecked = isChecked
-                        updateOrderSummary()
+                        val uid = auth.currentUser?.uid ?: return@setOnCheckedChangeListener
+                        database.child("Users").child(uid).child("Pantry").child(ing.id).child("isChecked").setValue(isChecked)
                     }
                 }
-                row.addView(cb)
-                row.addView(TextView(this).apply {
-                    text = "${ing.name} (${ing.amount})"
+
+                // UI FIX: Removed parentheses (amount). Now displays "Name xCount" clearly.
+                val tvInfo = TextView(this).apply {
+                    text = "${ing.name} x${ing.count}"
                     layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
-                })
+                    setTextColor(Color.BLACK)
+                    textSize = 16f
+                }
+
+                val btnMinus = ImageButton(this).apply {
+                    setImageResource(android.R.drawable.ic_input_delete)
+                    setColorFilter(Color.RED)
+                    setBackgroundColor(Color.TRANSPARENT)
+                    setPadding(15, 10, 15, 10)
+                    setOnClickListener { updateFirebaseItemCount(ing, -1) }
+                }
+
+                val btnPlus = ImageButton(this).apply {
+                    setImageResource(android.R.drawable.ic_input_add)
+                    setColorFilter(Color.parseColor("#4B8A34"))
+                    setBackgroundColor(Color.TRANSPARENT)
+                    setPadding(15, 10, 15, 10)
+                    setOnClickListener { updateFirebaseItemCount(ing, 1) }
+                }
+
+                row.addView(cb)
+                row.addView(tvInfo)
+                row.addView(btnMinus)
+                row.addView(btnPlus)
                 llPantryList.addView(row)
             }
         }
         updateOrderSummary()
     }
 
+    private fun updateFirebaseItemCount(ing: PantryIngredient, change: Int) {
+        val uid = auth.currentUser?.uid ?: return
+
+        val currentC = if (ing.count <= 0) 1 else ing.count
+        val newC = currentC + change
+
+        if (newC <= 0) return
+
+        // Calculate single item price to adjust the total based on quantity
+        val singleItemPrice = ing.price / currentC
+        val totalNewPrice = newC * singleItemPrice
+
+        val updates = mapOf(
+            "count" to newC,
+            "price" to totalNewPrice
+        )
+
+        database.child("Users").child(uid).child("Pantry").child(ing.id).updateChildren(updates)
+    }
+
     private fun updateOrderSummary() {
         llOrderSummaryItems.removeAllViews()
         var total = 0.0
         pantryIngredients.filter { it.isChecked }.forEach {
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            row.addView(TextView(this).apply { text = "• ${it.name}"; layoutParams = LinearLayout.LayoutParams(0, -2, 1f) })
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 5, 0, 5) }
+            row.addView(TextView(this).apply {
+                text = "• ${it.name} x${it.count}"
+                layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+            })
             row.addView(TextView(this).apply { text = "₱${"%.2f".format(it.price)}" })
             llOrderSummaryItems.addView(row)
             total += it.price
@@ -156,6 +167,47 @@ class PantryActivity : AppCompatActivity() {
                 else -> false
             }
         }
+    }
+
+    private fun fetchStoresAndShowDialog() {
+        val selectedItems = pantryIngredients.filter { it.isChecked }
+        if (selectedItems.isEmpty()) {
+            Toast.makeText(this, "Select items first!", Toast.LENGTH_SHORT).show()
+            return
+        }
+        database.child("Businesses").addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val storeNames = mutableListOf<String>()
+                val storeUids = mutableListOf<String>()
+                for (bizSnapshot in snapshot.children) {
+                    val name = bizSnapshot.child("details").child("businessName").value?.toString()
+                    val uid = bizSnapshot.key
+                    if (name != null && uid != null) {
+                        storeNames.add(name)
+                        storeUids.add(uid)
+                    }
+                }
+                if (storeNames.isEmpty()) {
+                    Toast.makeText(this@PantryActivity, "No stores available", Toast.LENGTH_SHORT).show()
+                } else {
+                    AlertDialog.Builder(this@PantryActivity)
+                        .setTitle("Select Store to Pick Up")
+                        .setItems(storeNames.toTypedArray()) { _, which ->
+                            navigateToConfirmation(storeNames[which], storeUids[which], selectedItems)
+                        }
+                        .setNegativeButton("Cancel", null).show()
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        })
+    }
+
+    private fun navigateToConfirmation(businessName: String, businessUid: String, selectedItems: List<PantryIngredient>) {
+        val intent = Intent(this, OrderConfirmationActivity::class.java)
+        intent.putExtra("STORE_NAME", businessName)
+        intent.putExtra("STORE_UID", businessUid)
+        intent.putExtra("SELECTED_ITEMS", ArrayList(selectedItems))
+        startActivity(intent)
     }
 
     private fun showClearPantryConfirmation() {
