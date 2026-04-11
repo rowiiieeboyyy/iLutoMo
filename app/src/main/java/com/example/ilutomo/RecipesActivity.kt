@@ -10,6 +10,7 @@ import android.text.style.StrikethroughSpan
 import android.util.Log
 import android.view.View
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -25,6 +26,7 @@ class RecipesActivity : AppCompatActivity() {
 
     private lateinit var tvNeeded: TextView
     private lateinit var rvAvailable: RecyclerView
+    private lateinit var tvServings: TextView
     private var currentIngredients = mutableListOf<DisplayIngredient>()
     private var currentRecipe: Recipe? = null
     private val ingredientLibrary = mutableMapOf<String, Map<String, Double>>()
@@ -39,14 +41,37 @@ class RecipesActivity : AppCompatActivity() {
         // Initialize Views
         tvNeeded = findViewById(R.id.tvNeededList)
         rvAvailable = findViewById(R.id.rvAvailableIngredients)
+        tvServings = findViewById(R.id.tvRecipeServings) // Ensure this ID exists in activity_recipes.xml
+
         val btnChoose = findViewById<Button>(R.id.btnChooseRecipe)
         val btnMacros = findViewById<Button>(R.id.btnViewMacros)
         val btnSteps = findViewById<Button>(R.id.btnViewSteps)
         val btnAddToPantry = findViewById<Button>(R.id.btnAddToPantry)
+        val btnPlus = findViewById<ImageButton>(R.id.btnRecipePlus)
+        val btnMinus = findViewById<ImageButton>(R.id.btnRecipeMinus)
         val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNav)
 
         rvAvailable.layoutManager = LinearLayoutManager(this)
         loadIngredientLibrary()
+
+        // Portion Control Listeners
+        btnPlus.setOnClickListener {
+            currentRecipe?.let {
+                it.servings++
+                tvServings.text = it.servings.toString()
+                renderNeededList()
+            }
+        }
+
+        btnMinus.setOnClickListener {
+            currentRecipe?.let {
+                if (it.servings > 1) {
+                    it.servings--
+                    tvServings.text = it.servings.toString()
+                    renderNeededList()
+                }
+            }
+        }
 
         // Navigation Logic
         bottomNav.selectedItemId = R.id.nav_recipes
@@ -54,20 +79,17 @@ class RecipesActivity : AppCompatActivity() {
             when (item.itemId) {
                 R.id.nav_home -> {
                     startActivity(Intent(this, HomeActivity::class.java))
-                    overridePendingTransition(0, 0)
                     finish()
                     true
                 }
                 R.id.nav_recipes -> true
                 R.id.nav_pantry -> {
                     startActivity(Intent(this, PantryActivity::class.java))
-                    overridePendingTransition(0, 0)
                     finish()
                     true
                 }
                 R.id.nav_profile -> {
                     startActivity(Intent(this, ProfileActivity::class.java))
-                    overridePendingTransition(0, 0)
                     finish()
                     true
                 }
@@ -76,17 +98,14 @@ class RecipesActivity : AppCompatActivity() {
         }
 
         btnChoose.setOnClickListener { showAllRecipesDiscovery(btnChoose) }
-
         btnMacros.setOnClickListener {
             if (currentRecipe == null) Toast.makeText(this, "Select a recipe first!", Toast.LENGTH_SHORT).show()
             else showAccurateMacrosDialog(currentRecipe!!)
         }
-
         btnSteps.setOnClickListener {
             if (currentRecipe == null) Toast.makeText(this, "Select a recipe first!", Toast.LENGTH_SHORT).show()
             else showStepsDialog(currentRecipe!!)
         }
-
         btnAddToPantry.setOnClickListener { addToPantry() }
     }
 
@@ -100,7 +119,7 @@ class RecipesActivity : AppCompatActivity() {
                 }
             }
             override fun onCancelled(error: DatabaseError) {
-                Log.e("RecipesActivity", "Error loading library: ${error.message}")
+                Log.e("RecipesActivity", "Error: ${error.message}")
             }
         })
     }
@@ -114,51 +133,17 @@ class RecipesActivity : AppCompatActivity() {
                 recipe.id = snap.key ?: ""
                 addedRecipes.add(recipe)
             }
+            if (addedRecipes.isEmpty()) return@addOnSuccessListener
 
-            if (addedRecipes.isEmpty()) {
-                Toast.makeText(this, "No recipes in your list!", Toast.LENGTH_LONG).show()
-                return@addOnSuccessListener
-            }
-
-            addedRecipes.sortBy { it.title }
             val titles = addedRecipes.map { it.title }.toTypedArray()
-
-            AlertDialog.Builder(this)
-                .setTitle("Select Recipe")
-                .setItems(titles) { _, which ->
-                    val selected = addedRecipes[which]
-                    currentRecipe = selected
-                    btnChoose.text = selected.title
-                    loadRecipeDataIntoUI(selected)
-                }
-                .setNeutralButton("Delete") { _, _ -> showDeleteRecipeDialog(addedRecipes, btnChoose) }
-                .setNegativeButton("Cancel", null)
-                .show()
+            AlertDialog.Builder(this).setTitle("Select Recipe").setItems(titles) { _, which ->
+                val selected = addedRecipes[which]
+                currentRecipe = selected
+                btnChoose.text = selected.title
+                tvServings.text = selected.servings.toString()
+                loadRecipeDataIntoUI(selected)
+            }.show()
         }
-    }
-
-    private fun showDeleteRecipeDialog(recipes: List<Recipe>, btnChoose: Button) {
-        val uid = auth.currentUser?.uid ?: return
-        val titles = recipes.map { it.title }.toTypedArray()
-
-        AlertDialog.Builder(this)
-            .setTitle("Remove Recipe")
-            .setItems(titles) { _, which ->
-                val selected = recipes[which]
-                database.child("Users").child(uid).child("AddedRecipes")
-                    .child(selected.id).removeValue()
-                    .addOnSuccessListener {
-                        Toast.makeText(this, "Removed ${selected.title}", Toast.LENGTH_SHORT).show()
-                        if (currentRecipe?.id == selected.id) {
-                            currentRecipe = null
-                            btnChoose.text = "Select from your added recipes"
-                            currentIngredients.clear()
-                            updateUI()
-                        }
-                    }
-            }
-            .setNegativeButton("Back", null)
-            .show()
     }
 
     private fun loadRecipeDataIntoUI(recipe: Recipe) {
@@ -175,23 +160,37 @@ class RecipesActivity : AppCompatActivity() {
     }
 
     private fun renderNeededList() {
-        if (currentIngredients.isEmpty()) {
-            tvNeeded.text = "No recipe selected"
-            return
-        }
+        val recipe = currentRecipe ?: return
+        val multiplier = recipe.servings
         val fullText = StringBuilder()
-        currentIngredients.forEach { fullText.append("${it.name} (${it.amount})\n\n") }
+
+        currentIngredients.forEach { ing ->
+            val scaledAmount = scaleAmount(ing.amount, multiplier)
+            fullText.append("${ing.name} ($scaledAmount)\n\n")
+        }
+
         val spannable = SpannableString(fullText.toString())
         var currentPos = 0
         currentIngredients.forEach { ing ->
-            val segment = "${ing.name} (${ing.amount})\n\n"
+            val scaledAmount = scaleAmount(ing.amount, multiplier)
+            val segment = "${ing.name} ($scaledAmount)\n\n"
             if (!ing.isChecked) {
                 spannable.setSpan(StrikethroughSpan(), currentPos, currentPos + ing.name.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                spannable.setSpan(ForegroundColorSpan(Color.parseColor("#888888")), currentPos, currentPos + ing.name.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                spannable.setSpan(ForegroundColorSpan(Color.GRAY), currentPos, currentPos + ing.name.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
             currentPos += segment.length
         }
         tvNeeded.text = spannable
+    }
+
+    private fun scaleAmount(amount: String, multiplier: Int): String {
+        val numberRegex = "([0-9]*\\.?[0-9]+)".toRegex()
+        val match = numberRegex.find(amount)
+        return if (match != null) {
+            val scaledValue = match.value.toDouble() * multiplier
+            val formatted = if (scaledValue % 1 == 0.0) scaledValue.toInt().toString() else "%.1f".format(scaledValue)
+            amount.replaceFirst(match.value, formatted)
+        } else amount
     }
 
     private fun showAccurateMacrosDialog(recipe: Recipe) {
@@ -199,30 +198,20 @@ class RecipesActivity : AppCompatActivity() {
         val dialog = AlertDialog.Builder(this).setView(dialogView).create()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
 
-        val tvTitle = dialogView.findViewById<TextView>(R.id.dialogTitle)
         val tvContent = dialogView.findViewById<TextView>(R.id.dialogContent)
         val tvTotal = dialogView.findViewById<TextView>(R.id.tvTotalValue)
-        val llTotal = dialogView.findViewById<LinearLayout>(R.id.llTotalSection)
-        val btnDone = dialogView.findViewById<Button>(R.id.btnDialogDone)
-
-        tvTitle.text = "Detailed Nutrition"
-        llTotal.visibility = View.VISIBLE
+        val multiplier = recipe.servings
 
         val contentBuilder = StringBuilder()
         var totalCals = 0.0; var totalCarbs = 0.0; var totalProt = 0.0; var totalSug = 0.0; var totalPrice = 0.0
 
         recipe.ingredients?.forEach { (fullName, amount) ->
-            // Cleans "Pork Belly (200)" to "Pork Belly" for database lookup
             val cleanName = fullName.split("(")[0].trim()
-            val qtyString = amount.toString()
-            val qtyNumeric = qtyString.replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 1.0
-
+            val qtyNumeric = (amount.toString().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 1.0) * multiplier
             val entry = ingredientLibrary.entries.find { it.key.equals(cleanName, true) }?.value
 
             if (entry != null) {
                 val factor = if (cleanName.contains("Egg", true)) qtyNumeric else (qtyNumeric / 50.0)
-
-                // Matching Firebase keys: cal, carb, pro, sugar, price
                 val kcal = factor * (entry["cal"] ?: 0.0)
                 val carbs = factor * (entry["carb"] ?: 0.0)
                 val prot = factor * (entry["pro"] ?: 0.0)
@@ -230,20 +219,15 @@ class RecipesActivity : AppCompatActivity() {
                 val price = factor * (entry["price"] ?: 0.0)
 
                 totalCals += kcal; totalCarbs += carbs; totalProt += prot; totalSug += sugar; totalPrice += price
-
-                contentBuilder.append("• $fullName\n")
-                contentBuilder.append("   ${kcal.toInt()} kcal | P: ${prot.toInt()}g | C: ${carbs.toInt()}g | S: ${sugar.toInt()}g\n")
-                contentBuilder.append("   Cost: ₱${"%.2f".format(price)}\n\n")
-            } else {
-                contentBuilder.append("• $fullName\n   (Nutrition data unavailable)\n\n")
+                contentBuilder.append("• $fullName (${scaleAmount(amount.toString(), multiplier)})\n")
+                contentBuilder.append("   ${kcal.toInt()} kcal | P: ${prot.toInt()}g | C: ${carbs.toInt()}g\n\n")
             }
         }
 
         tvContent.text = contentBuilder.toString().trim()
-        tvTotal.text = "Total: ${totalCals.toInt()} kcal | ₱${"%.2f".format(totalPrice)}\n" +
-                "P: ${totalProt.toInt()}g | C: ${totalCarbs.toInt()}g | S: ${totalSug.toInt()}g"
+        tvTotal.text = "Total: ${totalCals.toInt()} kcal | ₱${"%.2f".format(totalPrice)}\nP: ${totalProt.toInt()}g | C: ${totalCarbs.toInt()}g"
 
-        btnDone.setOnClickListener { dialog.dismiss() }
+        dialogView.findViewById<Button>(R.id.btnDialogDone).setOnClickListener { dialog.dismiss() }
         dialog.show()
     }
 
@@ -251,38 +235,26 @@ class RecipesActivity : AppCompatActivity() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_custom_info, null)
         val dialog = AlertDialog.Builder(this).setView(dialogView).create()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-        val tvTitle = dialogView.findViewById<TextView>(R.id.dialogTitle)
-        val tvContent = dialogView.findViewById<TextView>(R.id.dialogContent)
-        val llTotal = dialogView.findViewById<LinearLayout>(R.id.llTotalSection)
-        val btnDone = dialogView.findViewById<Button>(R.id.btnDialogDone)
-
-        tvTitle.text = "Cooking Steps"
-        llTotal.visibility = View.GONE
-
         val steps = recipe.steps?.mapIndexed { i, s -> "${i + 1}. $s" }?.joinToString("\n\n") ?: "No steps."
-        tvContent.text = steps
-
-        btnDone.setOnClickListener { dialog.dismiss() }
+        dialogView.findViewById<TextView>(R.id.dialogContent).text = steps
+        dialogView.findViewById<Button>(R.id.btnDialogDone).setOnClickListener { dialog.dismiss() }
         dialog.show()
     }
 
     private fun addToPantry() {
         val uid = auth.currentUser?.uid ?: return
-        if (currentRecipe == null) return
+        val recipe = currentRecipe ?: return
+        val multiplier = recipe.servings
         val selected = currentIngredients.filter { it.isChecked }
-        if (selected.isEmpty()) {
-            Toast.makeText(this, "Check ingredients first", Toast.LENGTH_SHORT).show()
-            return
-        }
 
         val pantryRef = database.child("Users").child(uid).child("Pantry")
         selected.forEach { ing ->
             val key = pantryRef.push().key ?: return@forEach
-            val item = mapOf("id" to key, "name" to ing.name, "amount" to ing.amount, "recipeTitle" to currentRecipe!!.title, "isChecked" to true)
+            val scaledAmt = scaleAmount(ing.amount, multiplier)
+            val item = mapOf("id" to key, "name" to ing.name, "amount" to scaledAmt, "recipeTitle" to recipe.title, "isChecked" to true)
             pantryRef.child(key).setValue(item)
         }
-        Toast.makeText(this, "Added to Pantry!", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Added for $multiplier servings!", Toast.LENGTH_SHORT).show()
         startActivity(Intent(this, PantryActivity::class.java))
     }
 }

@@ -3,6 +3,7 @@ package com.example.ilutomo
 import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
+import android.util.TypedValue
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -25,6 +26,9 @@ class RecipeDetailsActivity : AppCompatActivity() {
     private var userLat: Double = 0.0
     private var userLng: Double = 0.0
 
+    // Local copy of the recipe to handle serving changes
+    private var currentRecipe: Recipe? = null
+
     data class BusinessLocation(val address: String, val lat: Double, val lng: Double, var distance: Double = 0.0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,8 +37,9 @@ class RecipeDetailsActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         // Retrieving the Serialized recipe object passed from RecipeAdapter
-        val recipe = intent.getSerializableExtra("RECIPE") as? Recipe
+        currentRecipe = intent.getSerializableExtra("RECIPE") as? Recipe
 
+        val recipe = currentRecipe
         if (recipe == null) {
             Log.e("PANTRY_DEBUG", "Recipe object is NULL from Intent!")
             Toast.makeText(this, "Error: Recipe data missing", Toast.LENGTH_SHORT).show()
@@ -43,9 +48,29 @@ class RecipeDetailsActivity : AppCompatActivity() {
         }
 
         binding.detailToolbar.setNavigationOnClickListener { finish() }
+
+        // --- PORTION CONTROL LISTENERS ---
+        binding.btnDetailPlus.setOnClickListener {
+            recipe.servings++
+            updateServingUI()
+        }
+
+        binding.btnDetailMinus.setOnClickListener {
+            if (recipe.servings > 1) {
+                recipe.servings--
+                updateServingUI()
+            }
+        }
+
         binding.fabAddToPantry.setOnClickListener { addToPantry(recipe) }
 
         fetchUserLocationAndData(recipe)
+    }
+
+    private fun updateServingUI() {
+        val recipe = currentRecipe ?: return
+        binding.tvDetailServings.text = recipe.servings.toString()
+        setupUI(recipe)
     }
 
     private fun fetchUserLocationAndData(recipe: Recipe) {
@@ -98,31 +123,38 @@ class RecipeDetailsActivity : AppCompatActivity() {
     private fun setupUI(recipe: Recipe) {
         binding.tvDetailTitle.text = recipe.title
         binding.tvDetailDescription.text = recipe.description
+        binding.tvDetailServings.text = recipe.servings.toString()
 
         val imageResId = resources.getIdentifier(recipe.imageResourceName, "drawable", packageName)
         binding.ivRecipeDetailImage.setImageResource(if (imageResId != 0) imageResId else R.drawable.placeholder_food)
 
-        // --- UPDATED: POPULATE NUTRITION FACTS FROM CALCULATED DATA ---
-        // Instead of reading the 'macros' string map from Firebase, we use our local Int map.
+        // --- SCALE NUTRITION FACTS ---
+        val multiplier = recipe.servings
         val macros = recipe.calculatedMacros
-        binding.tvDetailCalories.text = (macros["Calories"] ?: 0).toString()
-        binding.tvDetailProtein.text = "${macros["Protein"] ?: 0}g"
-        binding.tvDetailCarbs.text = "${macros["Carbs"] ?: 0}g"
-        binding.tvDetailSugar.text = "${macros["Sugar"] ?: 0}g"
-        binding.tvDetailSodium.text = "${macros["Sodium"] ?: 0}mg"
+        binding.tvDetailCalories.text = ((macros["Calories"] ?: 0) * multiplier).toString()
+        binding.tvDetailProtein.text = "${(macros["Protein"] ?: 0) * multiplier}g"
+        binding.tvDetailCarbs.text = "${(macros["Carbs"] ?: 0) * multiplier}g"
+        binding.tvDetailSugar.text = "${(macros["Sugar"] ?: 0) * multiplier}g"
+        binding.tvDetailSodium.text = "${(macros["Sodium"] ?: 0) * multiplier}mg"
 
-        // --- POPULATE INGREDIENTS ---
+        // --- SCALE INGREDIENTS ---
         binding.llIngredientsList.removeAllViews()
-        recipe.ingredients?.forEach { (name, amount) ->
+        recipe.ingredients?.forEach { (name, rawAmount) ->
+            val scaledAmount = scaleAmount(rawAmount.toString(), multiplier)
+
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(0, 8, 0, 8)
             }
+
             val tvName = TextView(this).apply {
-                text = "• $name ($amount)"
+                text = "• $name ($scaledAmount)"
                 setTextColor(Color.BLACK)
-                layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+                // Correct way to set text size in SP via code
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
+
             row.addView(tvName)
             binding.llIngredientsList.addView(row)
         }
@@ -133,10 +165,25 @@ class RecipeDetailsActivity : AppCompatActivity() {
         }?.joinToString("\n\n") ?: "No cooking steps provided."
     }
 
+    private fun scaleAmount(amount: String, multiplier: Int): String {
+        val numberRegex = "([0-9]*\\.?[0-9]+)".toRegex()
+        val match = numberRegex.find(amount)
+
+        return if (match != null) {
+            val originalValue = match.value.toDouble()
+            val scaledValue = originalValue * multiplier
+            val formattedValue = if (scaledValue % 1 == 0.0) scaledValue.toInt().toString() else "%.1f".format(scaledValue)
+            amount.replaceFirst(match.value, formattedValue)
+        } else {
+            amount
+        }
+    }
+
     private fun addToPantry(recipe: Recipe) {
         val uid = auth.currentUser?.uid ?: return
         val pantryRef = database.child("Users").child(uid).child("Pantry")
         val ingredients = recipe.ingredients
+        val multiplier = recipe.servings
 
         if (ingredients.isNullOrEmpty()) {
             Toast.makeText(this, "No ingredients found", Toast.LENGTH_SHORT).show()
@@ -145,16 +192,18 @@ class RecipeDetailsActivity : AppCompatActivity() {
 
         ingredients.forEach { (name, amount) ->
             val key = pantryRef.push().key ?: return@forEach
+            val finalAmount = scaleAmount(amount.toString(), multiplier)
+
             val pantryItem = PantryIngredient(
                 id = key,
                 name = name,
-                amount = amount.toString(),
+                amount = finalAmount,
                 price = 0.0,
                 recipeTitle = recipe.title,
                 isChecked = true
             )
             pantryRef.child(key).setValue(pantryItem)
         }
-        Toast.makeText(this, "Added to Pantry!", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Added to Pantry for $multiplier serving(s)!", Toast.LENGTH_SHORT).show()
     }
 }

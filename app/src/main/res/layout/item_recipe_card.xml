@@ -30,26 +30,75 @@
             android:textStyle="bold"
             android:textColor="#333333" />
 
+        <TextView
+            android:id="@+id/tvRecipeCategory"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Category"
+            android:textSize="12sp"
+            android:textColor="#777777" />
+
+        <TextView
+            android:id="@+id/tvRecipeMacros"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="P: 0g | S: 0g | C: 0g"
+            android:textSize="12sp"
+            android:textColor="#555555" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginTop="4dp">
+            android:layout_marginTop="8dp">
 
-            <TextView
-                android:id="@+id/tvRecipeCategory"
-                android:layout_width="0dp"
+            <LinearLayout
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Category"
-                android:textSize="12sp"
-                android:textColor="#777777" />
+                android:background="@drawable/dialog_rounded_bg"
+                android:backgroundTint="#F1F8F1"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:padding="2dp">
+
+                <ImageButton
+                    android:id="@+id/btnHomeMinus"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_input_delete"
+                    app:tint="#2D5A27" />
+
+                <TextView
+                    android:id="@+id/tvHomeServings"
+                    android:layout_width="24dp"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:text="1"
+                    android:textColor="#2D5A27"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <ImageButton
+                    android:id="@+id/btnHomePlus"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_input_add"
+                    app:tint="#2D5A27" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
 
             <ImageView
                 android:id="@+id/btnAddRecipe"
-                android:layout_width="30dp"
-                android:layout_height="30dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:padding="4dp"
                 android:src="@android:drawable/ic_input_add"
                 app:tint="#4CAF50" />

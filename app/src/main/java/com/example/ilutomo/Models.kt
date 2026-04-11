@@ -22,6 +22,11 @@ data class Recipe(
     // Kept for backward compatibility
     var macros: Map<String, String>? = mutableMapOf(),
 
+    // --- NEW PORTION CONTROL FIELD ---
+    // We EXCLUDE this from Firebase to keep the multiplier local to the user's session
+    @get:Exclude
+    var servings: Int = 1,
+
     // LOCAL-ONLY FIELDS: We EXCLUDE these from Firebase to prevent crashes.
     @get:Exclude
     var calculatedPrice: Double = 0.0,
