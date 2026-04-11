@@ -81,16 +81,7 @@
                             <CheckBox android:id="@+id/cbOthers" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Others" android:textSize="11sp"/>
                         </GridLayout>
 
-                        <EditText
-                            android:id="@+id/etOtherAllergen"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:hint="Specify others..."
-                            android:textSize="12sp"
-                            android:visibility="gone"
-                            android:background="@android:drawable/editbox_background_normal"
-                            android:padding="8dp"/>
+                        <EditText android:id="@+id/etOtherAllergen" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:hint="Specify others..." android:textSize="12sp" android:visibility="gone" android:background="@android:drawable/editbox_background_normal" android:padding="8dp"/>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
@@ -114,15 +105,8 @@
                         </LinearLayout>
                         <com.google.android.material.slider.RangeSlider
                             android:id="@+id/rangeBudget"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:valueFrom="0"
-                            android:valueTo="1000"
-                            app:labelBehavior="floating"
-                            app:tickVisible="false"
-                            app:thumbRadius="8dp"
-                            app:thumbColor="#2D5A27"
-                            app:trackColorActive="#2D5A27"
+                            android:layout_width="match_parent" android:layout_height="wrap_content"
+                            android:valueFrom="0" android:valueTo="1000"
                             app:values="@array/initial_range_values" />
 
                         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
@@ -131,50 +115,40 @@
                         </LinearLayout>
                         <com.google.android.material.slider.RangeSlider
                             android:id="@+id/rangeProtein"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:valueFrom="0"
-                            android:valueTo="100"
-                            app:labelBehavior="floating"
-                            app:tickVisible="false"
-                            app:thumbRadius="8dp"
-                            app:thumbColor="#2D5A27"
-                            app:trackColorActive="#2D5A27"
+                            android:layout_width="match_parent" android:layout_height="wrap_content"
+                            android:valueFrom="0" android:valueTo="100"
                             app:values="@array/initial_range_values" />
 
                         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
-                            <CheckBox android:id="@+id/checkCarbs" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Carbs (g)" android:textSize="12sp" android:textColor="#2D5A27" />
+                            <CheckBox android:id="@+id/checkCarbs" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Carbs (Max g)" android:textSize="12sp" android:textColor="#2D5A27" />
                             <EditText android:id="@+id/etCarbsInput" android:layout_width="60dp" android:layout_height="wrap_content" android:inputType="number" android:textSize="12sp" android:hint="0" android:textAlignment="center" android:visibility="gone" />
                         </LinearLayout>
-                        <com.google.android.material.slider.RangeSlider
+                        <com.google.android.material.slider.Slider
                             android:id="@+id/rangeCarbs"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:valueFrom="0"
-                            android:valueTo="100"
-                            app:labelBehavior="floating"
-                            app:tickVisible="false"
-                            app:thumbRadius="8dp"
-                            app:thumbColor="#2D5A27"
-                            app:trackColorActive="#2D5A27"
-                            app:values="@array/initial_range_values" />
+                            android:layout_width="match_parent" android:layout_height="wrap_content"
+                            android:valueFrom="0" android:valueTo="100"
+                            android:value="100" />
 
                         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
-                            <CheckBox android:id="@+id/checkSugar" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Sugar (g)" android:textSize="12sp" android:textColor="#2D5A27" />
+                            <CheckBox android:id="@+id/checkSugar" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Sugar (Max g)" android:textSize="12sp" android:textColor="#2D5A27" />
                             <EditText android:id="@+id/etSugarInput" android:layout_width="60dp" android:layout_height="wrap_content" android:inputType="number" android:textSize="12sp" android:hint="0" android:textAlignment="center" android:visibility="gone" />
                         </LinearLayout>
-                        <com.google.android.material.slider.RangeSlider
+                        <com.google.android.material.slider.Slider
                             android:id="@+id/rangeSugar"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:valueFrom="0"
-                            android:valueTo="100"
-                            app:labelBehavior="floating"
-                            app:tickVisible="false"
-                            app:thumbRadius="8dp"
-                            app:thumbColor="#2D5A27"
-                            app:trackColorActive="#2D5A27"
-                            app:values="@array/initial_range_values" />
+                            android:layout_width="match_parent" android:layout_height="wrap_content"
+                            android:valueFrom="0" android:valueTo="100"
+                            android:value="100" />
+
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                            <CheckBox android:id="@+id/checkCalories" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Calories (Max kcal)" android:textSize="12sp" android:textColor="#2D5A27" />
+                            <EditText android:id="@+id/etCaloriesInput" android:layout_width="60dp" android:layout_height="wrap_content" android:inputType="number" android:textSize="12sp" android:hint="0" android:textAlignment="center" android:visibility="gone" />
+                        </LinearLayout>
+                        <com.google.android.material.slider.Slider
+                            android:id="@+id/rangeCalories"
+                            android:layout_width="match_parent" android:layout_height="wrap_content"
+                            android:valueFrom="0" android:valueTo="2000"
+                            android:value="2000" />
+
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
@@ -203,8 +177,9 @@
                         <TextView android:id="@+id/tvSummaryAllergens" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Allergens: None" android:textColor="#FFFFFF" android:textSize="11sp" />
                         <TextView android:id="@+id/tvSummaryBudget" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Budget: ₱0" android:textColor="#FFFFFF" android:textSize="11sp" />
                         <TextView android:id="@+id/tvSummaryProtein" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Protein: 0g" android:textColor="#FFFFFF" android:textSize="11sp" />
-                        <TextView android:id="@+id/tvSummaryCarbs" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Carbs: 0g" android:textColor="#FFFFFF" android:textSize="11sp" />
-                        <TextView android:id="@+id/tvSummarySugar" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Sugar: 0g" android:textColor="#FFFFFF" android:textSize="11sp" />
+                        <TextView android:id="@+id/tvSummaryCarbs" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Carbs: Max 0g" android:textColor="#FFFFFF" android:textSize="11sp" />
+                        <TextView android:id="@+id/tvSummarySugar" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Sugar: Max 0g" android:textColor="#FFFFFF" android:textSize="11sp" />
+                        <TextView android:id="@+id/tvSummaryCalories" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Calories: Max 0kcal" android:textColor="#FFFFFF" android:textSize="11sp" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 

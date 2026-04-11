@@ -2,8 +2,6 @@ package com.example.ilutomo
 
 import android.content.Intent
 import android.os.Bundle
-import android.text.Editable
-import android.text.TextWatcher
 import android.view.View
 import android.widget.CheckBox
 import android.widget.EditText
@@ -12,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.example.ilutomo.databinding.ActivityProfileBinding
 import com.google.android.material.slider.LabelFormatter
 import com.google.android.material.slider.RangeSlider
+import com.google.android.material.slider.Slider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 
@@ -36,8 +35,14 @@ class ProfileActivity : AppCompatActivity() {
         binding.btnSave.setOnClickListener { savePreferences() }
     }
 
+    override fun onResume() {
+        super.onResume()
+        binding.bottomNav.setOnItemSelectedListener(null)
+        binding.bottomNav.selectedItemId = R.id.nav_profile
+        setupBottomNavigation()
+    }
+
     private fun setupInteractiveListeners() {
-        // Diet Selection (Radio behavior)
         val dietChecks = listOf(binding.cbStandard, binding.cbVegetarian, binding.cbKeto, binding.cbPescatarian)
         dietChecks.forEach { cb ->
             cb.setOnClickListener { dietChecks.filter { it != cb }.forEach { it.isChecked = false } }
@@ -48,27 +53,38 @@ class ProfileActivity : AppCompatActivity() {
             if (!isChecked) binding.etOtherAllergen.setText("")
         }
 
-        // Sync all sliders
-        syncSliderAndInput(binding.checkBudget, binding.rangeBudget, binding.etBudgetInput)
-        syncSliderAndInput(binding.checkProtein, binding.rangeProtein, binding.etProteinInput)
-        syncSliderAndInput(binding.checkCarbs, binding.rangeCarbs, binding.etCarbsInput)
-        syncSliderAndInput(binding.checkSugar, binding.rangeSugar, binding.etSugarInput)
+        syncRangeSlider(binding.checkBudget, binding.rangeBudget, binding.etBudgetInput)
+        syncRangeSlider(binding.checkProtein, binding.rangeProtein, binding.etProteinInput)
+        syncSingleSlider(binding.checkCarbs, binding.rangeCarbs, binding.etCarbsInput)
+        syncSingleSlider(binding.checkSugar, binding.rangeSugar, binding.etSugarInput)
+        syncSingleSlider(binding.checkCalories, binding.rangeCalories, binding.etCaloriesInput)
     }
 
-    private fun syncSliderAndInput(checkBox: CheckBox, slider: RangeSlider, editText: EditText) {
+    private fun syncRangeSlider(checkBox: CheckBox, slider: RangeSlider, editText: EditText) {
         slider.labelBehavior = LabelFormatter.LABEL_FLOATING
         slider.setLabelFormatter { it.toInt().toString() }
-
         checkBox.setOnCheckedChangeListener { _, isChecked ->
             slider.isEnabled = isChecked
             editText.visibility = if (isChecked) View.VISIBLE else View.GONE
             updateSummaryUI()
         }
-
         slider.addOnChangeListener { s, _, _ ->
             updateSummaryUI()
-            // Optional: Show the upper bound in the EditText
             editText.setText(s.values[1].toInt().toString())
+        }
+    }
+
+    private fun syncSingleSlider(checkBox: CheckBox, slider: Slider, editText: EditText) {
+        slider.labelBehavior = LabelFormatter.LABEL_FLOATING
+        slider.setLabelFormatter { it.toInt().toString() }
+        checkBox.setOnCheckedChangeListener { _, isChecked ->
+            slider.isEnabled = isChecked
+            editText.visibility = if (isChecked) View.VISIBLE else View.GONE
+            updateSummaryUI()
+        }
+        slider.addOnChangeListener { s, _, _ ->
+            updateSummaryUI()
+            editText.setText(s.value.toInt().toString())
         }
     }
 
@@ -81,14 +97,15 @@ class ProfileActivity : AppCompatActivity() {
         }
         binding.tvSummaryDiet.text = "Diet: $selectedDiet"
 
-        fun getRangeText(check: CheckBox, slider: RangeSlider, unit: String): String {
-            return if (check.isChecked) "${slider.values[0].toInt()}$unit - ${slider.values[1].toInt()}$unit" else "Not set"
-        }
+        binding.tvSummaryBudget.text = if (binding.checkBudget.isChecked)
+            "Budget: ₱${binding.rangeBudget.values[0].toInt()} - ₱${binding.rangeBudget.values[1].toInt()}" else "Budget: Not set"
 
-        binding.tvSummaryBudget.text = "Budget: ${getRangeText(binding.checkBudget, binding.rangeBudget, "₱")}"
-        binding.tvSummaryProtein.text = "Protein: ${getRangeText(binding.checkProtein, binding.rangeProtein, "g")}"
-        binding.tvSummaryCarbs.text = "Carbs: ${getRangeText(binding.checkCarbs, binding.rangeCarbs, "g")}"
-        binding.tvSummarySugar.text = "Sugar: ${getRangeText(binding.checkSugar, binding.rangeSugar, "g")}"
+        binding.tvSummaryProtein.text = if (binding.checkProtein.isChecked)
+            "Protein: ${binding.rangeProtein.values[0].toInt()}g - ${binding.rangeProtein.values[1].toInt()}g" else "Protein: Not set"
+
+        binding.tvSummaryCarbs.text = if (binding.checkCarbs.isChecked) "Carbs: Max ${binding.rangeCarbs.value.toInt()}g" else "Carbs: Not set"
+        binding.tvSummarySugar.text = if (binding.checkSugar.isChecked) "Sugar: Max ${binding.rangeSugar.value.toInt()}g" else "Sugar: Not set"
+        binding.tvSummaryCalories.text = if (binding.checkCalories.isChecked) "Calories: Max ${binding.rangeCalories.value.toInt()}kcal" else "Calories: Not set"
     }
 
     private fun savePreferences() {
@@ -105,27 +122,20 @@ class ProfileActivity : AppCompatActivity() {
                 "Gluten" to binding.cbGluten.isChecked,
                 "Dairy" to binding.cbDairy.isChecked,
                 "Others" to binding.cbOthers.isChecked,
-                "Others_Value" to binding.etOtherAllergen.text.toString()
+                "Others_Value" to binding.etOtherAllergen.text.toString().trim()
             )
         )
 
-        // SAVE BOTH MIN AND MAX
-        if (binding.checkBudget.isChecked) {
-            prefs["budget_min"] = binding.rangeBudget.values[0].toInt()
-            prefs["budget_max"] = binding.rangeBudget.values[1].toInt()
-        }
-        if (binding.checkProtein.isChecked) {
-            prefs["protein_min"] = binding.rangeProtein.values[0].toInt()
-            prefs["protein_max"] = binding.rangeProtein.values[1].toInt()
-        }
-        if (binding.checkCarbs.isChecked) {
-            prefs["carbs_min"] = binding.rangeCarbs.values[0].toInt()
-            prefs["carbs_max"] = binding.rangeCarbs.values[1].toInt()
-        }
-        if (binding.checkSugar.isChecked) {
-            prefs["sugar_min"] = binding.rangeSugar.values[0].toInt()
-            prefs["sugar_max"] = binding.rangeSugar.values[1].toInt()
-        }
+        // If Checked, use the slider value. If Unchecked, save a high value to ignore the filter.
+        prefs["budget_min"] = if (binding.checkBudget.isChecked) binding.rangeBudget.values[0].toInt() else 0
+        prefs["budget_max"] = if (binding.checkBudget.isChecked) binding.rangeBudget.values[1].toInt() else 10000
+
+        prefs["protein_min"] = if (binding.checkProtein.isChecked) binding.rangeProtein.values[0].toInt() else 0
+        prefs["protein_max"] = if (binding.checkProtein.isChecked) binding.rangeProtein.values[1].toInt() else 1000
+
+        prefs["carbs_max"] = if (binding.checkCarbs.isChecked) binding.rangeCarbs.value.toInt() else 1000
+        prefs["sugar_max"] = if (binding.checkSugar.isChecked) binding.rangeSugar.value.toInt() else 1000
+        prefs["calories_max"] = if (binding.checkCalories.isChecked) binding.rangeCalories.value.toInt() else 10000
 
         database.child("Users").child(uid).child("Preferences").setValue(prefs)
             .addOnSuccessListener {
@@ -138,39 +148,61 @@ class ProfileActivity : AppCompatActivity() {
         val uid = auth.currentUser?.uid ?: return
         database.child("Users").child(uid).child("Preferences").get().addOnSuccessListener { snapshot ->
             if (snapshot.exists()) {
-                // Restore Diet
                 val diet = snapshot.child("dietary_type").value.toString()
                 binding.cbKeto.isChecked = diet == "Keto"
                 binding.cbVegetarian.isChecked = diet == "Vegetarian"
                 binding.cbPescatarian.isChecked = diet == "Pescatarian"
                 binding.cbStandard.isChecked = (diet == "Standard" || diet == "null")
 
-                // Restore Sliders with 2 points
-                fun restore(slider: RangeSlider, check: CheckBox, keyMin: String, keyMax: String) {
-                    val minV = snapshot.child(keyMin).value?.toString()?.toFloatOrNull()
-                    val maxV = snapshot.child(keyMax).value?.toString()?.toFloatOrNull()
-                    if (minV != null && maxV != null) {
+                fun restoreRange(slider: RangeSlider, check: CheckBox, key: String, defaultMax: Float) {
+                    val min = snapshot.child("${key}_min").value?.toString()?.toFloatOrNull() ?: 0f
+                    val max = snapshot.child("${key}_max").value?.toString()?.toFloatOrNull() ?: defaultMax
+                    if (max < defaultMax) {
                         check.isChecked = true
-                        slider.isEnabled = true
-                        slider.values = listOf(minV, maxV)
+                        slider.values = listOf(min, max)
                     }
                 }
-                restore(binding.rangeBudget, binding.checkBudget, "budget_min", "budget_max")
-                restore(binding.rangeProtein, binding.checkProtein, "protein_min", "protein_max")
-                restore(binding.rangeCarbs, binding.checkCarbs, "carbs_min", "carbs_max")
-                restore(binding.rangeSugar, binding.checkSugar, "sugar_min", "sugar_max")
+                restoreRange(binding.rangeBudget, binding.checkBudget, "budget", 10000f)
+                restoreRange(binding.rangeProtein, binding.checkProtein, "protein", 1000f)
+
+                fun restoreSingle(slider: Slider, check: CheckBox, key: String, defaultMax: Float) {
+                    val max = snapshot.child("${key}_max").value?.toString()?.toFloatOrNull() ?: defaultMax
+                    if (max < defaultMax) {
+                        check.isChecked = true
+                        slider.value = max
+                    }
+                }
+                restoreSingle(binding.rangeCarbs, binding.checkCarbs, "carbs", 1000f)
+                restoreSingle(binding.rangeSugar, binding.checkSugar, "sugar", 1000f)
+                restoreSingle(binding.rangeCalories, binding.checkCalories, "calories", 10000f)
+
+                val alg = snapshot.child("allergens")
+                binding.cbSoy.isChecked = alg.child("Soy").value == true
+                binding.cbGluten.isChecked = alg.child("Gluten").value == true
+                binding.cbDairy.isChecked = alg.child("Dairy").value == true
+                binding.cbOthers.isChecked = alg.child("Others").value == true
+                binding.etOtherAllergen.setText(alg.child("Others_Value").value?.toString() ?: "")
+
                 updateSummaryUI()
             }
         }
     }
 
     private fun setupBottomNavigation() {
-        binding.bottomNav.selectedItemId = R.id.nav_profile
         binding.bottomNav.setOnItemSelectedListener { item ->
-            when (item.itemId) {
-                R.id.nav_home -> { startActivity(Intent(this, HomeActivity::class.java)); true }
-                else -> false
+            if (item.itemId == R.id.nav_profile) return@setOnItemSelectedListener true
+            val intent = when (item.itemId) {
+                R.id.nav_home -> Intent(this, HomeActivity::class.java)
+                R.id.nav_recipes -> Intent(this, RecipesActivity::class.java)
+                R.id.nav_pantry -> Intent(this, PantryActivity::class.java)
+                else -> null
             }
+            intent?.let {
+                it.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                startActivity(it)
+                overridePendingTransition(0, 0)
+            }
+            true
         }
     }
 }
