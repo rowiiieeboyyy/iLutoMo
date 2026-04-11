@@ -35,10 +35,13 @@ class RecipeAdapter(
         holder.category.text = recipe.category
         holder.price.visibility = View.GONE
 
-        val p = formatMacroDisplay(getMacro(recipe.macros, "Protein"))
-        val s = formatMacroDisplay(getMacro(recipe.macros, "Sugar"))
-        val c = formatMacroDisplay(getMacro(recipe.macros, "Carbs"))
-        holder.macros.text = "P: $p | S: $s | C: $c"
+        // UPDATED: Pulling from calculatedMacros map created in HomeActivity
+        val p = recipe.calculatedMacros["Protein"] ?: 0
+        val s = recipe.calculatedMacros["Sugar"] ?: 0
+        val c = recipe.calculatedMacros["Carbs"] ?: 0
+
+        // Displaying the calculated numbers
+        holder.macros.text = "P: ${p}g | S: ${s}g | C: ${c}g"
 
         val context = holder.itemView.context
         val imageResId = context.resources.getIdentifier(
@@ -46,28 +49,16 @@ class RecipeAdapter(
         )
         holder.img.setImageResource(if (imageResId != 0) imageResId else android.R.drawable.ic_menu_gallery)
 
-        // FIX 1: The Add to Recipes button logic
         holder.btnAdd.setOnClickListener {
-            // Trigger the callback to save to the database
             onAddClick(recipe)
         }
 
-        // FIX 2: Open details ONLY when the rest of the card is clicked
-        // We set this click listener but ensure the button above handles its own clicks
         holder.itemView.setOnClickListener {
             val intent = Intent(context, RecipeDetailsActivity::class.java)
+            // Passing the recipe object which now contains the calculatedMacros
             intent.putExtra("RECIPE", recipe)
             context.startActivity(intent)
         }
-    }
-
-    private fun getMacro(map: Map<String, String>?, key: String): String {
-        return map?.entries?.find { it.key.equals(key, ignoreCase = true) }?.value ?: "0"
-    }
-
-    private fun formatMacroDisplay(value: String): String {
-        val cleanValue = value.replace("g", "").trim()
-        return "${cleanValue}g"
     }
 
     override fun getItemCount() = recipes.size

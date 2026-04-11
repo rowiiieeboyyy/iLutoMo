@@ -32,7 +32,7 @@ class RecipeDetailsActivity : AppCompatActivity() {
         binding = ActivityRecipeDetailsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Ensure your RecipeAdapter uses the key "RECIPE"
+        // Retrieving the Serialized recipe object passed from RecipeAdapter
         val recipe = intent.getSerializableExtra("RECIPE") as? Recipe
 
         if (recipe == null) {
@@ -102,15 +102,14 @@ class RecipeDetailsActivity : AppCompatActivity() {
         val imageResId = resources.getIdentifier(recipe.imageResourceName, "drawable", packageName)
         binding.ivRecipeDetailImage.setImageResource(if (imageResId != 0) imageResId else R.drawable.placeholder_food)
 
-        // --- POPULATE NUTRITION FACTS ---
-        val macros = recipe.macros
-        if (macros != null) {
-            binding.tvDetailCalories.text = macros["Calories"] ?: "0"
-            binding.tvDetailProtein.text = "${macros["Protein"] ?: "0"}g"
-            binding.tvDetailCarbs.text = "${macros["Carbs"] ?: "0"}g"
-            binding.tvDetailSugar.text = "${macros["Sugar"] ?: "0"}g"
-            binding.tvDetailSodium.text = "${macros["Sodium"] ?: "0"}mg"
-        }
+        // --- UPDATED: POPULATE NUTRITION FACTS FROM CALCULATED DATA ---
+        // Instead of reading the 'macros' string map from Firebase, we use our local Int map.
+        val macros = recipe.calculatedMacros
+        binding.tvDetailCalories.text = (macros["Calories"] ?: 0).toString()
+        binding.tvDetailProtein.text = "${macros["Protein"] ?: 0}g"
+        binding.tvDetailCarbs.text = "${macros["Carbs"] ?: 0}g"
+        binding.tvDetailSugar.text = "${macros["Sugar"] ?: 0}g"
+        binding.tvDetailSodium.text = "${macros["Sodium"] ?: 0}mg"
 
         // --- POPULATE INGREDIENTS ---
         binding.llIngredientsList.removeAllViews()

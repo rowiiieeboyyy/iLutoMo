@@ -5,7 +5,7 @@ import java.io.Serializable
 
 /**
  * Model for Recipe data stored in Firebase.
- * Used for filtering based on dietary type, allergens, and nutritional macros.
+ * Updated to support dynamic macro calculation from the ingredient library.
  */
 @IgnoreExtraProperties
 data class Recipe(
@@ -16,9 +16,16 @@ data class Recipe(
     var imageResourceName: String = "",
     var ingredients: Map<String, Any>? = emptyMap(), // Map of Ingredient Name to Amount (String/Double)
     var allergens: List<String>? = emptyList(), // Standard allergen tags
-    var macros: Map<String, String>? = emptyMap(), // Nutritional summary (Calories, Carbs, etc.)
+
+    // This can stay for now to prevent crashes, but we will primarily use calculatedMacros
+    var macros: Map<String, String>? = emptyMap(),
+
     var steps: List<String>? = emptyList(),
-    var calculatedPrice: Double = 0.0
+    var calculatedPrice: Double = 0.0,
+
+    // NEW: Map to store the numeric results of our ingredient-based calculation
+    // Key: "Calories", "Sugar", "Carbs", etc. | Value: The calculated total
+    var calculatedMacros: MutableMap<String, Int> = mutableMapOf()
 ) : Serializable
 
 /**
