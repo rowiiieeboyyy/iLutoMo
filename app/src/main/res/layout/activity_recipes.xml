@@ -3,142 +3,176 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F8F9FA">
+    android:background="#F0F2F0"> <TextView
+    android:id="@+id/tvRecipeHeader"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_margin="24dp"
+    android:text="Recipe Details"
+    android:textColor="#1B3022"
+    android:textSize="28sp"
+    android:textStyle="bold"
+    app:layout_constraintStart_toStartOf="parent"
+    app:layout_constraintTop_toTopOf="parent" />
 
-    <TextView
-        android:id="@+id/tvRecipeHeader"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_margin="20dp"
-        android:text="Recipes"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"/>
-
-    <androidx.cardview.widget.CardView
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/cvSelection"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        app:cardCornerRadius="15dp"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="16dp"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="4dp"
+        app:strokeColor="#DDDDDD"
+        app:strokeWidth="1dp"
         app:layout_constraintTop_toBottomOf="@id/tvRecipeHeader">
 
         <Button
             android:id="@+id/btnChooseRecipe"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@android:color/transparent"
+            android:layout_height="60dp"
             android:text="Select from your added recipes"
             android:textColor="#1B3022"
+            android:textSize="16sp"
             android:textStyle="bold" />
-    </androidx.cardview.widget.CardView>
+    </com.google.android.material.card.MaterialCardView>
 
     <LinearLayout
         android:id="@+id/llLists"
         android:layout_width="match_parent"
         android:layout_height="0dp"
+        android:layout_marginTop="16dp"
         android:orientation="horizontal"
-        android:padding="10dp"
-        android:layout_marginTop="10dp"
-        app:layout_constraintTop_toBottomOf="@id/cvSelection"
-        app:layout_constraintBottom_toTopOf="@id/llActionButtons">
+        android:paddingHorizontal="12dp"
+        app:layout_constraintBottom_toTopOf="@id/llActionButtons"
+        app:layout_constraintTop_toBottomOf="@id/cvSelection">
 
-        <LinearLayout
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="0dp"
             android:layout_height="match_parent"
+            android:layout_margin="8dp"
             android:layout_weight="1"
-            android:orientation="vertical"
-            android:background="#E0E0E0"
-            android:layout_margin="5dp"
-            android:padding="10dp">
-            <TextView
-                android:text="List Needed:"
-                android:textStyle="bold"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"/>
-            <TextView
-                android:id="@+id/tvNeededList"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="No recipe selected"
-                android:textSize="16sp"
-                android:lineSpacingExtra="14dp"/>
-        </LinearLayout>
+            app:cardCornerRadius="16dp"
+            app:cardElevation="2dp">
 
-        <LinearLayout
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:text="List Needed:"
+                    android:textColor="#1B3022"
+                    android:textStyle="bold" />
+
+                <ScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+                    <TextView
+                        android:id="@+id/tvNeededList"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:lineSpacingExtra="8dp"
+                        android:text="No recipe selected"
+                        android:textColor="#555555"
+                        android:textSize="15sp" />
+                </ScrollView>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="0dp"
             android:layout_height="match_parent"
+            android:layout_margin="8dp"
             android:layout_weight="1"
-            android:orientation="vertical"
-            android:background="#E0E0E0"
-            android:layout_margin="5dp"
-            android:padding="10dp">
-            <TextView
-                android:id="@+id/tvPantryLabel"
-                android:text="Add to Pantry:"
-                android:textStyle="bold"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"/>
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvAvailableIngredients"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="2dp">
+
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent" />
-        </LinearLayout>
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/tvPantryLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:text="Add to Pantry:"
+                    android:textColor="#1B3022"
+                    android:textStyle="bold" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvAvailableIngredients"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/llActionButtons"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="@android:color/white"
+        android:elevation="10dp"
         android:orientation="vertical"
-        android:padding="10dp"
+        android:padding="16dp"
         app:layout_constraintBottom_toTopOf="@id/bottomNav">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal">
-            <Button
-                android:id="@+id/btnViewMacros"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_margin="5dp"
-                android:backgroundTint="#D3D3D3"
-                android:text="View Macronutrients"
-                android:textAllCaps="false"
-                android:textColor="#1B3022" />
 
-            <Button
-                android:id="@+id/btnViewSteps"
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnViewMacros"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_margin="4dp"
                 android:layout_weight="1"
-                android:layout_margin="5dp"
-                android:backgroundTint="#D3D3D3"
-                android:text="View Cooking Steps"
+                android:text="Macros"
                 android:textAllCaps="false"
-                android:textColor="#1B3022" />
+                android:textColor="#1B3022"
+                app:strokeColor="#1B3022" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnViewSteps"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_margin="4dp"
+                android:layout_weight="1"
+                android:text="Steps"
+                android:textAllCaps="false"
+                android:textColor="#1B3022"
+                app:strokeColor="#1B3022" />
         </LinearLayout>
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnAddToPantry"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_margin="5dp"
+            android:layout_height="56dp"
+            android:layout_marginTop="8dp"
             android:backgroundTint="#1B3022"
-            android:text="Add to pantry"
+            android:text="Add Selected to Pantry"
             android:textAllCaps="false"
-            android:textColor="@android:color/white" />
+            android:textSize="16sp"
+            app:cornerRadius="12dp" />
     </LinearLayout>
 
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottomNav"
         android:layout_width="match_parent"
         android:layout_height="65dp"
+        android:background="@android:color/white"
         app:layout_constraintBottom_toBottomOf="parent"
         app:menu="@menu/bottom_nav_menu" />
 

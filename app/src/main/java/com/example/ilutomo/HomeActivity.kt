@@ -173,13 +173,11 @@ class HomeActivity : AppCompatActivity() {
                         var pro = 0.0; var carb = 0.0; var sug = 0.0; var cal = 0.0; var sod = 0.0
                         var totalPrice = 0.0
 
-                        // DYNAMIC CALCULATION BASED ON INGREDIENTS
                         r.ingredients?.forEach { (name, amt) ->
                             val qty = amt.toString().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0
                             val lib = ingredientLibrary[name]
 
                             if (lib != null) {
-                                // Logic: Assume library values are per 50g/ml (or per piece for eggs)
                                 val factor = if (name.contains("Egg", true)) qty else (qty / 50.0)
 
                                 pro += factor * (lib.child("pro").value?.toString()?.toDoubleOrNull() ?: 0.0)
@@ -189,11 +187,10 @@ class HomeActivity : AppCompatActivity() {
                                 sod += factor * (lib.child("sodium").value?.toString()?.toDoubleOrNull() ?: 0.0)
                             }
 
-                            // Price Calculation
                             for (biz in sortedByDist) {
                                 val matches = inventoryMap[biz.key]?.filter { it.ingredient.equals(name, true) }
                                 if (!matches.isNullOrEmpty()) {
-                                    totalPrice += (matches.minOf { it.price } * (qty / 100.0)) // Assuming price is per 100g/unit
+                                    totalPrice += (matches.minOf { it.price } * (qty / 100.0))
                                     break
                                 }
                             }
@@ -201,7 +198,6 @@ class HomeActivity : AppCompatActivity() {
 
                         r.calculatedPrice = totalPrice
 
-                        // Populate the NEW calculatedMacros map for filtering and UI
                         r.calculatedMacros["Protein"] = pro.toInt()
                         r.calculatedMacros["Carbs"] = carb.toInt()
                         r.calculatedMacros["Sugar"] = sug.toInt()
@@ -222,7 +218,6 @@ class HomeActivity : AppCompatActivity() {
         val baseFiltered = allRecipes.filter { r ->
             if (!isRecipeSafeForUser(r)) return@filter false
 
-            // Pull values from our new numeric map
             val pVal = r.calculatedMacros["Protein"]?.toDouble() ?: 0.0
             val cVal = r.calculatedMacros["Carbs"]?.toDouble() ?: 0.0
             val sVal = r.calculatedMacros["Sugar"]?.toDouble() ?: 0.0
@@ -242,13 +237,33 @@ class HomeActivity : AppCompatActivity() {
         recipeAdapter.notifyDataSetChanged()
     }
 
+    /**
+     * Updated safety logic: Checks both the ingredients list AND explicit allergen tags.
+     */
     private fun isRecipeSafeForUser(recipe: Recipe): Boolean {
+        // 1. Dietary Type check
         if (userDiet != "Standard" && !recipe.category.equals(userDiet, ignoreCase = true)) return false
-        recipe.ingredients?.keys?.forEach { ing ->
-            val ingLower = ing.lowercase()
-            if (activeAllergens.any { ingLower.contains(it.lowercase()) }) return false
-            if (customAllergen.isNotBlank() && customAllergen != "null" && ingLower.contains(customAllergen)) return false
+
+        // 2. Build a search list of all recipe contents
+        val recipeContents = mutableListOf<String>()
+
+        // Add all ingredient names
+        recipe.ingredients?.keys?.forEach { recipeContents.add(it.lowercase()) }
+
+        // Add all explicit allergen tags from the database (e.g., "Eggs", "Dairy")
+        recipe.allergens?.forEach { recipeContents.add(it.lowercase()) }
+
+        // 3. Check against user's active checkboxes (Soy, Gluten, Dairy)
+        activeAllergens.forEach { allergen ->
+            if (recipeContents.any { it.contains(allergen.lowercase()) }) return false
         }
+
+        // 4. Check against "Others" custom input (e.g., user typed "eggs")
+        if (customAllergen.isNotBlank() && customAllergen != "null") {
+            // Checks if the user's typed word exists in any ingredient name or allergen tag
+            if (recipeContents.any { it.contains(customAllergen.lowercase()) }) return false
+        }
+
         return true
     }
 

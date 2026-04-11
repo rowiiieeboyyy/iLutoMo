@@ -1,36 +1,37 @@
 package com.example.ilutomo
 
+import com.google.firebase.database.Exclude
 import com.google.firebase.database.IgnoreExtraProperties
 import java.io.Serializable
 
 /**
  * Model for Recipe data stored in Firebase.
- * Updated to support dynamic macro calculation from the ingredient library.
+ * Updated with @Exclude to prevent crashes from missing local calculation fields.
  */
 @IgnoreExtraProperties
 data class Recipe(
     var id: String = "",
     var title: String = "",
     var description: String = "",
-    var category: String = "", // Used for Dietary Type filtering (e.g., "Keto", "Vegetarian")
+    var category: String = "Standard",
     var imageResourceName: String = "",
-    var ingredients: Map<String, Any>? = emptyMap(), // Map of Ingredient Name to Amount (String/Double)
-    var allergens: List<String>? = emptyList(), // Standard allergen tags
+    var ingredients: Map<String, Any>? = mutableMapOf(),
+    var allergens: List<String>? = mutableListOf(),
+    var steps: List<String>? = mutableListOf(),
 
-    // This can stay for now to prevent crashes, but we will primarily use calculatedMacros
-    var macros: Map<String, String>? = emptyMap(),
+    // Kept for backward compatibility
+    var macros: Map<String, String>? = mutableMapOf(),
 
-    var steps: List<String>? = emptyList(),
+    // LOCAL-ONLY FIELDS: We EXCLUDE these from Firebase to prevent crashes.
+    @get:Exclude
     var calculatedPrice: Double = 0.0,
 
-    // NEW: Map to store the numeric results of our ingredient-based calculation
-    // Key: "Calories", "Sugar", "Carbs", etc. | Value: The calculated total
+    @get:Exclude
     var calculatedMacros: MutableMap<String, Int> = mutableMapOf()
 ) : Serializable
 
 /**
  * Model for UI display in RecipesActivity.
- * Allows users to check/uncheck ingredients they already have.
  */
 data class DisplayIngredient(
     val name: String,
