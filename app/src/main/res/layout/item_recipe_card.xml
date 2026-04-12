@@ -44,8 +44,18 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:text="P: 0g | S: 0g | C: 0g"
-            android:textSize="12sp"
+            android:textSize="11sp"
             android:textColor="#555555" />
+
+        <TextView
+            android:id="@+id/tvRecipePrice"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="₱0.00"
+            android:textColor="#2D5A27"
+            android:textSize="14sp"
+            android:textStyle="bold" />
 
         <LinearLayout
             android:layout_width="match_parent"

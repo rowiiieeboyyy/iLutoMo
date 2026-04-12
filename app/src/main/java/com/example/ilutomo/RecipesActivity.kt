@@ -23,6 +23,8 @@ class RecipesActivity : AppCompatActivity() {
     private lateinit var tvNeeded: TextView
     private lateinit var rvAvailable: RecyclerView
     private lateinit var tvServings: TextView
+    private lateinit var tvDetailPrice: TextView
+
     private var currentIngredients = mutableListOf<DisplayIngredient>()
     private var currentRecipe: Recipe? = null
     private val ingredientLibrary = mutableMapOf<String, Map<String, Double>>()
@@ -34,10 +36,10 @@ class RecipesActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_recipes)
 
-        // Initialize Views
         tvNeeded = findViewById(R.id.tvNeededList)
         rvAvailable = findViewById(R.id.rvAvailableIngredients)
         tvServings = findViewById(R.id.tvRecipeServings)
+        tvDetailPrice = findViewById(R.id.tvRecipeDetailPrice)
 
         val btnChoose = findViewById<Button>(R.id.btnChooseRecipe)
         val btnMacros = findViewById<Button>(R.id.btnViewMacros)
@@ -50,12 +52,11 @@ class RecipesActivity : AppCompatActivity() {
         rvAvailable.layoutManager = LinearLayoutManager(this)
         loadIngredientLibrary()
 
-        // Portion Control Listeners
         btnPlus.setOnClickListener {
             currentRecipe?.let {
                 it.servings++
                 tvServings.text = it.servings.toString()
-                renderNeededList()
+                updateUI()
             }
         }
 
@@ -64,12 +65,11 @@ class RecipesActivity : AppCompatActivity() {
                 if (it.servings > 1) {
                     it.servings--
                     tvServings.text = it.servings.toString()
-                    renderNeededList()
+                    updateUI()
                 }
             }
         }
 
-        // Navigation Logic
         bottomNav.selectedItemId = R.id.nav_recipes
         bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
@@ -175,7 +175,11 @@ class RecipesActivity : AppCompatActivity() {
     }
 
     private fun updateUI() {
-        rvAvailable.adapter = IngredientCheckAdapter(currentIngredients) { renderNeededList() }
+        val multiplier = currentRecipe?.servings ?: 1
+        // LINE 183 FIX: Passing currentIngredients, then multiplier, then the trailing lambda
+        rvAvailable.adapter = IngredientCheckAdapter(currentIngredients, multiplier) {
+            renderNeededList()
+        }
         renderNeededList()
     }
 
@@ -183,11 +187,23 @@ class RecipesActivity : AppCompatActivity() {
         val recipe = currentRecipe ?: return
         val multiplier = recipe.servings
         val fullText = StringBuilder()
+        var calculatedTotalPrice = 0.0
 
         currentIngredients.forEach { ing ->
             val scaledAmount = scaleAmount(ing.amount, multiplier)
             fullText.append("${ing.name} ($scaledAmount)\n\n")
+
+            val cleanName = ing.name.split("(")[0].trim()
+            val entry = ingredientLibrary.entries.find { it.key.equals(cleanName, true) }?.value
+            if (entry != null) {
+                val qtyNumeric = (ing.amount.replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0)
+                val scaledQty = qtyNumeric * multiplier
+                val standardPrice = entry["price"] ?: 0.0
+                calculatedTotalPrice += standardPrice * (scaledQty / 100.0)
+            }
         }
+
+        tvDetailPrice.text = "Total Price: ₱${"%.2f".format(calculatedTotalPrice)}"
 
         val spannable = SpannableString(fullText.toString())
         var currentPos = 0
@@ -229,24 +245,28 @@ class RecipesActivity : AppCompatActivity() {
 
         val contentBuilder = StringBuilder()
         val multiplier = recipe.servings
-        var totalCals = 0.0; var totalCarbs = 0.0; var totalProt = 0.0; var totalSug = 0.0; var totalPrice = 0.0
+        var totalCals = 0.0; var totalCarbs = 0.0; var totalProt = 0.0; var totalPrice = 0.0
 
         recipe.ingredients?.forEach { (fullName, amount) ->
             val cleanName = fullName.split("(")[0].trim()
-            val qtyNumeric = (amount.toString().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 1.0) * multiplier
+            val qtyNumeric = (amount.toString().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0)
+            val scaledQty = qtyNumeric * multiplier
+
             val entry = ingredientLibrary.entries.find { it.key.equals(cleanName, true) }?.value
 
             if (entry != null) {
-                val factor = if (cleanName.contains("Egg", true)) qtyNumeric else (qtyNumeric / 50.0)
+                val factor = if (cleanName.contains("Egg", true)) scaledQty else (scaledQty / 50.0)
                 val kcal = factor * (entry["cal"] ?: 0.0)
                 val carbs = factor * (entry["carb"] ?: 0.0)
                 val prot = factor * (entry["pro"] ?: 0.0)
-                val price = factor * (entry["price"] ?: 0.0)
 
-                totalCals += kcal; totalCarbs += carbs; totalProt += prot; totalPrice += price
+                val standardPrice = entry["price"] ?: 0.0
+                val individualPrice = standardPrice * (scaledQty / 100.0)
+
+                totalCals += kcal; totalCarbs += carbs; totalProt += prot; totalPrice += individualPrice
 
                 contentBuilder.append("• $fullName (${scaleAmount(amount.toString(), multiplier)})\n")
-                contentBuilder.append("   ${kcal.toInt()} kcal | P: ${prot.toInt()}g | C: ${carbs.toInt()}g\n\n")
+                contentBuilder.append("   ₱${"%.2f".format(individualPrice)} | ${kcal.toInt()} kcal | P: ${prot.toInt()}g\n\n")
             }
         }
 
@@ -294,14 +314,16 @@ class RecipesActivity : AppCompatActivity() {
 
             val cleanName = ing.name.split("(")[0].trim()
             val entry = ingredientLibrary.entries.find { it.key.equals(cleanName, true) }?.value
-            val qtyNumeric = (ing.amount.replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 1.0) * multiplier
-            val factor = if (cleanName.contains("Egg", true)) qtyNumeric else (qtyNumeric / 50.0)
-            val calculatedPrice = factor * (entry?.get("price") ?: 0.0)
+            val qtyNumeric = (ing.amount.replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 1.0)
+            val scaledQty = qtyNumeric * multiplier
+
+            val standardPrice = entry?.get("price") ?: 0.0
+            val calculatedPrice = standardPrice * (scaledQty / 100.0)
 
             val item = mapOf(
                 "id" to key,
                 "name" to ing.name,
-                "amount" to ing.amount,
+                "amount" to scaleAmount(ing.amount, multiplier),
                 "recipeTitle" to recipe.title,
                 "isChecked" to true,
                 "count" to multiplier,

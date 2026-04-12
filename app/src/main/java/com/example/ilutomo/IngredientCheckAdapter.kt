@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.RecyclerView
 
 class IngredientCheckAdapter(
     private val ingredients: List<DisplayIngredient>,
+    private val multiplier: Int, // Added multiplier parameter
     private val onCheckChanged: () -> Unit
 ) : RecyclerView.Adapter<IngredientCheckAdapter.ViewHolder>() {
 
@@ -26,18 +27,40 @@ class IngredientCheckAdapter(
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val item = ingredients[position]
 
-        // 1. CLEAR the listener before setting the state to avoid recycling bugs
+        // 1. CLEAR the listener before setting state to avoid recycling bugs
         holder.checkBox.setOnCheckedChangeListener(null)
 
-        holder.tvName.text = "${item.name} (${item.amount})"
+        // 2. SCALE the amount for display based on current servings
+        val scaledAmount = scaleAmount(item.amount, multiplier)
+        holder.tvName.text = "${item.name} ($scaledAmount)"
         holder.checkBox.isChecked = item.isChecked
 
-        // 2. SET the listener to update the actual data object
+        // 3. SET the listener to update the data object
         holder.checkBox.setOnCheckedChangeListener { _, isChecked ->
             item.isChecked = isChecked
-            onCheckChanged() // Refreshes the strikethrough/summary in the Activity
+            onCheckChanged() // Notifies RecipesActivity to update the Needed List & Total Price
         }
     }
 
     override fun getItemCount() = ingredients.size
+
+    /**
+     * Helper function to multiply the numeric part of the amount string.
+     * E.g., "100g" with multiplier 2 becomes "200g"
+     */
+    private fun scaleAmount(amount: String, multiplier: Int): String {
+        val numberRegex = "([0-9]*\\.?[0-9]+)".toRegex()
+        val match = numberRegex.find(amount)
+        return if (match != null) {
+            val scaledValue = match.value.toDouble() * multiplier
+            val formatted = if (scaledValue % 1 == 0.0) {
+                scaledValue.toInt().toString()
+            } else {
+                "%.1f".format(scaledValue)
+            }
+            amount.replaceFirst(match.value, formatted)
+        } else {
+            amount
+        }
+    }
 }

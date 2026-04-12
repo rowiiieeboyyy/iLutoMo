@@ -64,6 +64,7 @@ class RecipeDetailsActivity : AppCompatActivity() {
 
         binding.fabAddToPantry.setOnClickListener { addToPantry(recipe) }
 
+        // Initial setup and data loading
         fetchUserLocationAndData(recipe)
     }
 
@@ -81,7 +82,10 @@ class RecipeDetailsActivity : AppCompatActivity() {
                 userLng = document.getDouble("longitude") ?: 0.0
                 loadBusinessData(recipe)
             }
-            .addOnFailureListener { loadBusinessData(recipe) }
+            .addOnFailureListener {
+                // Load data even if location fails to avoid empty UI
+                loadBusinessData(recipe)
+            }
     }
 
     private fun loadBusinessData(recipe: Recipe) {
@@ -108,7 +112,9 @@ class RecipeDetailsActivity : AppCompatActivity() {
                 }
                 setupUI(recipe)
             }
-            override fun onCancelled(error: DatabaseError) {}
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("DB_ERROR", error.message)
+            }
         })
     }
 
@@ -121,15 +127,22 @@ class RecipeDetailsActivity : AppCompatActivity() {
     }
 
     private fun setupUI(recipe: Recipe) {
+        val multiplier = recipe.servings
+
+        // Basic Info
         binding.tvDetailTitle.text = recipe.title
         binding.tvDetailDescription.text = recipe.description
-        binding.tvDetailServings.text = recipe.servings.toString()
+        binding.tvDetailServings.text = multiplier.toString()
 
+        // --- DYNAMIC PRICE DISPLAY ---
+        val totalPrice = recipe.calculatedPrice * multiplier
+        binding.tvDetailPrice.text = "₱${String.format("%.2f", totalPrice)}"
+
+        // Image loading
         val imageResId = resources.getIdentifier(recipe.imageResourceName, "drawable", packageName)
         binding.ivRecipeDetailImage.setImageResource(if (imageResId != 0) imageResId else R.drawable.placeholder_food)
 
         // --- SCALE NUTRITION FACTS ---
-        val multiplier = recipe.servings
         val macros = recipe.calculatedMacros
         binding.tvDetailCalories.text = ((macros["Calories"] ?: 0) * multiplier).toString()
         binding.tvDetailProtein.text = "${(macros["Protein"] ?: 0) * multiplier}g"
@@ -137,26 +150,27 @@ class RecipeDetailsActivity : AppCompatActivity() {
         binding.tvDetailSugar.text = "${(macros["Sugar"] ?: 0) * multiplier}g"
         binding.tvDetailSodium.text = "${(macros["Sodium"] ?: 0) * multiplier}mg"
 
-        // --- SCALE INGREDIENTS ---
+        // --- SCALE INGREDIENTS & INDIVIDUAL PRICES ---
         binding.llIngredientsList.removeAllViews()
         recipe.ingredients?.forEach { (name, rawAmount) ->
             val scaledAmount = scaleAmount(rawAmount.toString(), multiplier)
 
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setPadding(0, 8, 0, 8)
-            }
+            // Calculate individual price for this ingredient row
+            val ingredientBasePrice = recipe.ingredientPrices?.get(name) ?: 0.0
+            val ingredientTotalPrice = ingredientBasePrice * multiplier
+            val priceText = if (ingredientTotalPrice > 0) " - ₱${String.format("%.2f", ingredientTotalPrice)}" else ""
 
             val tvName = TextView(this).apply {
-                text = "• $name ($scaledAmount)"
+                text = "• $name ($scaledAmount)$priceText"
                 setTextColor(Color.BLACK)
-                // Correct way to set text size in SP via code
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                setPadding(0, 8, 0, 8)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
             }
-
-            row.addView(tvName)
-            binding.llIngredientsList.addView(row)
+            binding.llIngredientsList.addView(tvName)
         }
 
         // --- POPULATE STEPS ---
@@ -194,13 +208,17 @@ class RecipeDetailsActivity : AppCompatActivity() {
             val key = pantryRef.push().key ?: return@forEach
             val finalAmount = scaleAmount(amount.toString(), multiplier)
 
-            val pantryItem = PantryIngredient(
-                id = key,
-                name = name,
-                amount = finalAmount,
-                price = 0.0,
-                recipeTitle = recipe.title,
-                isChecked = true
+            // Get the actual cost for this ingredient at this serving size
+            val ingredientBasePrice = recipe.ingredientPrices?.get(name) ?: 0.0
+            val finalPrice = ingredientBasePrice * multiplier
+
+            val pantryItem = mapOf(
+                "id" to key,
+                "name" to name,
+                "amount" to finalAmount,
+                "price" to finalPrice,
+                "recipeTitle" to recipe.title,
+                "isChecked" to true
             )
             pantryRef.child(key).setValue(pantryItem)
         }

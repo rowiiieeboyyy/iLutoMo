@@ -55,6 +55,7 @@
             android:padding="24dp">
 
             <TextView
+                android:id="@+id/tvRecipeTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Selected Recipe: Pork Adobo"
@@ -65,16 +66,17 @@
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="10dp"
                 app:cardCornerRadius="30dp"
                 app:cardBackgroundColor="#BFBFBF"
                 app:cardElevation="0dp">
                 <TextView
+                    android:id="@+id/tvServingSize"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:padding="20dp"
+                    android:padding="12dp"
                     android:gravity="center"
-                    android:text="Serving size: 500"
+                    android:text="Serving size: 500g"
                     android:textColor="#000000"
                     android:textStyle="bold" />
             </androidx.cardview.widget.CardView>
@@ -83,19 +85,17 @@
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="15dp"
                 app:cardCornerRadius="30dp"
                 app:cardBackgroundColor="#BFBFBF"
                 app:cardElevation="0dp">
-                <ScrollView android:layout_width="match_parent" android:layout_height="match_parent">
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:padding="16dp"
-                        android:lineSpacingExtra="6dp"
-                        android:text="List: \t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\tPrice\nPork belly / kasim - 1 kg \t\t\t ₱391.04\nSoy sauce - 1L \t\t\t\t\t\t\t\t\t ₱53.50\nVinegar - 1L \t\t\t\t\t\t\t\t\t\t ₱43.00\nGarlic - 1 clove \t\t\t\t\t\t\t\t ₱30.00\nBay leaves - 10g \t\t\t\t\t\t\t ₱22.70\nWhole peppercorn - 50g \t\t\t ₱41.50\nWhite sugar - 1kg \t\t\t\t\t\t ₱79.00\nCooking oil - 1 \t\t\t\t\t\t\t\t ₱150.00"
-                        android:textColor="#000000" />
-                </ScrollView>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvIngredientsList"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:padding="8dp"
+                    android:clipToPadding="false"/>
             </androidx.cardview.widget.CardView>
 
             <LinearLayout
@@ -103,17 +103,37 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvBudgetStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Status: Calculating..."
+                    android:textStyle="italic"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="4dp"/>
+
                 <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content">
                     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Subtotal:" android:textStyle="bold" />
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:text="₱810.74" android:textStyle="bold" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:text="₱0.00" android:textStyle="bold" />
                 </RelativeLayout>
+
                 <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="VAT(12%):" android:textStyle="bold" />
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:text="₱97.29" android:textStyle="bold" />
-                </RelativeLayout>
-                <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Total:" android:textStyle="bold" android:textSize="18sp" />
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:text="₱908.03" android:textStyle="bold" android:textSize="18sp" />
+                    <TextView
+                        android:id="@+id/tvTotalCost"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Total:"
+                        android:textStyle="bold"
+                        android:textSize="18sp"
+                        android:textColor="#2E5A27"/>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentEnd="true"
+                        android:text="₱0.00"
+                        android:textStyle="bold"
+                        android:textSize="18sp" />
                 </RelativeLayout>
             </LinearLayout>
 
@@ -121,9 +141,9 @@
                 android:id="@+id/btnGetIngredientAction"
                 android:layout_width="match_parent"
                 android:layout_height="55dp"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="15dp"
                 android:background="@drawable/rounded_button_grey"
-                android:text="Get Ingredient"
+                android:text="Proceed to Order"
                 android:textAllCaps="false"
                 android:textColor="#000000"
                 android:textStyle="bold" />

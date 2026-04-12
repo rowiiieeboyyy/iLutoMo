@@ -6,7 +6,6 @@ import java.io.Serializable
 
 /**
  * Model for Recipe data stored in Firebase.
- * Updated with @Exclude to prevent crashes from missing local calculation fields.
  */
 @IgnoreExtraProperties
 data class Recipe(
@@ -18,31 +17,46 @@ data class Recipe(
     var ingredients: Map<String, Any>? = mutableMapOf(),
     var allergens: List<String>? = mutableListOf(),
     var steps: List<String>? = mutableListOf(),
-
-    // Kept for backward compatibility
     var macros: Map<String, String>? = mutableMapOf(),
 
-    // --- NEW PORTION CONTROL FIELD ---
-    // We EXCLUDE this from Firebase to keep the multiplier local to the user's session
+    // Excluded from Firebase: Local portion control
     @get:Exclude
     var servings: Int = 1,
 
-    // LOCAL-ONLY FIELDS: We EXCLUDE these from Firebase to prevent crashes.
+    // Excluded from Firebase: UI/Calculation results
     @get:Exclude
     var calculatedPrice: Double = 0.0,
 
+    // FIX: Added to store individual costs for the "Detailed Nutrition" breakdown
     @get:Exclude
-    var calculatedMacros: MutableMap<String, Int> = mutableMapOf()
+    var ingredientPrices: MutableMap<String, Double> = mutableMapOf(),
+
+    @get:Exclude
+    var calculatedMacros: MutableMap<String, Int> = mutableMapOf(
+        "Protein" to 0,
+        "Carbs" to 0,
+        "Sugar" to 0,
+        "Calories" to 0,
+        "Sodium" to 0
+    )
 ) : Serializable
 
 /**
- * Model for UI display in RecipesActivity.
+ * Model for items in a Business Inventory.
  */
-data class DisplayIngredient(
-    val name: String,
-    val amount: String,
-    var isChecked: Boolean = false
-)
+@IgnoreExtraProperties
+data class InventoryItem(
+    var id: String = "",
+    var ingredient: String = "",
+    var ingredientTag: String = "",
+    var itemGrade: String = "Budget",
+    var name: String = "",
+    var stock: Int = 0,
+    var size: String = "",
+    var price: Double = 0.0,
+    var img: String = "",
+    var timestamp: Long = 0
+) : Serializable
 
 /**
  * Model for items added to the User's Pantry or Shopping List.
@@ -59,8 +73,9 @@ data class PantryIngredient(
     var size: String = "",
     var businessName: String = "",
     var imageUrl: String = "",
-    // --- ADDED FOR PORTION/ITEM COUNT ---
-    var count: Int = 1
+    var count: Int = 1,
+    var itemGrade: String = "Budget",
+    var ingredientTag: String = ""
 ) : Serializable
 
 /**
@@ -79,3 +94,12 @@ data class Order(
     var pickupAddress: String = "",
     var pickupTime: String = ""
 ) : Serializable
+
+/**
+ * Model for UI display in RecipesActivity.
+ */
+data class DisplayIngredient(
+    val name: String,
+    val amount: String,
+    var isChecked: Boolean = false
+)
