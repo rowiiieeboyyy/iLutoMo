@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -62,53 +63,65 @@ class BusinessDashboardActivity : AppCompatActivity() {
         val uid = auth.currentUser?.uid ?: return
         firestore.collection("users").document(uid).get()
             .addOnSuccessListener { document ->
-                businessName = document.getString("businessName")
-                if (!businessName.isNullOrEmpty()) {
+                val name = document.getString("businessName")?.trim()
+                if (!name.isNullOrEmpty()) {
+                    businessName = name
                     loadInventoryStats()
+                    loadActiveOrders()
+                } else {
+                    Toast.makeText(this, "Set Business Name in Profile first", Toast.LENGTH_SHORT).show()
+                    binding.tvTotalItems.text = "0"
+                    binding.tvLowStock.text = "0"
                 }
-                // Always load active orders using the UID
-                loadActiveOrders()
+            }
+            .addOnFailureListener {
+                Toast.makeText(this, "Failed to load business info", Toast.LENGTH_SHORT).show()
             }
     }
 
     private fun loadInventoryStats() {
         val biz = businessName ?: return
+        // Path should be Businesses/[BusinessName]/inventory
         database.child("Businesses").child(biz).child("inventory")
             .addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
-                    var total = 0
+                    var totalCount = 0
                     val allLowStock = mutableListOf<InventoryItem>()
                     
                     for (child in snapshot.children) {
                         val item = child.getValue(InventoryItem::class.java)
                         if (item != null) {
-                            total++
-                            if (item.stock < 5) {
+                            totalCount++
+                            // Threshold updated to 30
+                            if (item.stock < 30) {
                                 allLowStock.add(item)
                             }
                         }
                     }
                     
-                    binding.tvTotalItems.text = total.toString()
+                    binding.tvTotalItems.text = totalCount.toString()
                     binding.tvLowStock.text = allLowStock.size.toString()
                     
-                    // Show top 10 lowest stock items
+                    // Show top 6 lowest stock items on dashboard
                     lowStockItems.clear()
                     allLowStock.sortBy { it.stock }
-                    lowStockItems.addAll(allLowStock.take(10))
+                    lowStockItems.addAll(allLowStock.take(6))
                     lowStockAdapter.notifyDataSetChanged()
                     
-                    binding.tvSeeMoreLowStock.visibility = if (allLowStock.size > 10) View.VISIBLE else View.GONE
+                    // Show "See More" if there are more than 6 low stock items
+                    binding.tvSeeMoreLowStock.visibility = if (allLowStock.size > 6) View.VISIBLE else View.GONE
                     binding.rlLowStockListHeader.visibility = if (allLowStock.isEmpty()) View.GONE else View.VISIBLE
                 }
-                override fun onCancelled(error: DatabaseError) {}
+                override fun onCancelled(error: DatabaseError) {
+                    Toast.makeText(this@BusinessDashboardActivity, "Inventory Error: ${error.message}", Toast.LENGTH_SHORT).show()
+                }
             })
     }
 
     private fun loadActiveOrders() {
-        val uid = auth.currentUser?.uid ?: return
-        // Updated to use the correct path: BusinessOrders/$uid
-        database.child("BusinessOrders").child(uid).addValueEventListener(object : ValueEventListener {
+        val biz = businessName ?: return
+        // Ensure path matches save logic: BusinessOrders/[BusinessName]
+        database.child("BusinessOrders").child(biz).addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 activeOrders.clear()
                 for (child in snapshot.children) {
@@ -124,7 +137,9 @@ class BusinessDashboardActivity : AppCompatActivity() {
                 
                 binding.tvNoPendingOrders.visibility = if (activeOrders.isEmpty()) View.VISIBLE else View.GONE
             }
-            override fun onCancelled(error: DatabaseError) {}
+            override fun onCancelled(error: DatabaseError) {
+                Toast.makeText(this@BusinessDashboardActivity, "Orders Error: ${error.message}", Toast.LENGTH_SHORT).show()
+            }
         })
     }
 
@@ -133,14 +148,14 @@ class BusinessDashboardActivity : AppCompatActivity() {
             startActivity(Intent(this, BusinessInventoryActivity::class.java))
         }
         binding.cvLowStock.setOnClickListener {
-            val intent = Intent(this, BusinessInventoryActivity::class.java)
-            intent.putExtra("FILTER_LOW_STOCK", true)
-            startActivity(intent)
+            startActivity(Intent(this, BusinessInventoryActivity::class.java).apply {
+                putExtra("FILTER_LOW_STOCK", true)
+            })
         }
         binding.tvSeeMoreLowStock.setOnClickListener {
-            val intent = Intent(this, BusinessInventoryActivity::class.java)
-            intent.putExtra("FILTER_LOW_STOCK", true)
-            startActivity(intent)
+            startActivity(Intent(this, BusinessInventoryActivity::class.java).apply {
+                putExtra("FILTER_LOW_STOCK", true)
+            })
         }
         binding.tvViewAllOrders.setOnClickListener {
             startActivity(Intent(this, BusinessOrdersActivity::class.java))

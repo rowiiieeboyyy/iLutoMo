@@ -105,9 +105,9 @@ class BusinessInventoryActivity : AppCompatActivity() {
         val biz = businessName ?: return
         AlertDialog.Builder(this)
             .setTitle("Delete Item")
-            .setMessage("Are you sure you want to delete ${item.itemName}?")
+            .setMessage("Are you sure you want to delete ${item.name}?")
             .setPositiveButton("Delete") { _, _ ->
-                database.child("Businesses").child(biz).child("inventory").child(item.itemName).removeValue()
+                database.child("Businesses").child(biz).child("inventory").child(item.name).removeValue()
                     .addOnSuccessListener { Toast.makeText(this, "Item deleted", Toast.LENGTH_SHORT).show() }
             }
             .setNegativeButton("Cancel", null)
@@ -122,7 +122,7 @@ class BusinessInventoryActivity : AppCompatActivity() {
 
         dialogBinding.tvDialogTitle.text = "Edit Inventory Item"
         dialogBinding.actvIngredient.setText(item.ingredient)
-        dialogBinding.etItemName.setText(item.itemName)
+        dialogBinding.etItemName.setText(item.name)
         dialogBinding.etStock.setText(item.stock.toString())
         dialogBinding.etPrice.setText(item.price.toString())
 
@@ -140,8 +140,8 @@ class BusinessInventoryActivity : AppCompatActivity() {
         dialogItemImageView = dialogBinding.ivItemImage
         selectedImageUri = null
 
-        if (item.imageUrl.isNotEmpty()) {
-            Glide.with(this).load(item.imageUrl).placeholder(R.drawable.placeholder_food).into(dialogBinding.ivItemImage)
+        if (item.img.isNotEmpty()) {
+            Glide.with(this).load(item.img).placeholder(R.drawable.placeholder_food).into(dialogBinding.ivItemImage)
         }
 
         dialogBinding.btnAddPhoto.setOnClickListener {
@@ -181,9 +181,9 @@ class BusinessInventoryActivity : AppCompatActivity() {
             val size = "$sizeValue $unit"
 
             if (selectedImageUri != null) {
-                uploadImageAndSave(ingredient, itemName, stock, size, price, dialog, item.itemName)
+                uploadImageAndSave(ingredient, itemName, stock, size, price, dialog, item.name)
             } else {
-                updateDatabase(item.itemName, ingredient, itemName, stock, size, price, item.imageUrl, dialog)
+                updateDatabase(item.name, ingredient, itemName, stock, size, price, item.img, dialog)
             }
         }
 
@@ -194,11 +194,11 @@ class BusinessInventoryActivity : AppCompatActivity() {
         val biz = businessName ?: return
         val updatedItem = mapOf(
             "ingredient" to ingredient,
-            "itemName" to newItemName,
+            "name" to newItemName,
             "stock" to stock,
             "size" to size,
             "price" to price,
-            "imageUrl" to imageUrl,
+            "img" to imageUrl,
             "timestamp" to System.currentTimeMillis()
         )
 
@@ -324,11 +324,11 @@ class BusinessInventoryActivity : AppCompatActivity() {
         val biz = businessName ?: return
         val newItem = InventoryItem(
             ingredient = ingredient,
-            itemName = itemName,
+            name = itemName,
             stock = stock,
             size = size,
             price = price,
-            imageUrl = imageUrl,
+            img = imageUrl,
             timestamp = System.currentTimeMillis()
         )
 
