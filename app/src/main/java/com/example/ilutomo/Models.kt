@@ -51,12 +51,24 @@ data class InventoryItem(
     var ingredientTag: String = "",
     var itemGrade: String = "Budget",
     var name: String = "",
+    var itemName: String = "", // Legacy field
     var stock: Int = 0,
     var size: String = "",
     var price: Double = 0.0,
     var img: String = "",
+    var imageUrl: String = "", // Legacy field
     var timestamp: Long = 0
-) : Serializable
+) : Serializable {
+    @Exclude
+    fun getDisplayName(): String {
+        return name.ifEmpty { itemName.ifEmpty { ingredient } }
+    }
+
+    @Exclude
+    fun getDisplayImg(): String {
+        return img.ifEmpty { imageUrl }
+    }
+}
 
 /**
  * Model for items added to the User's Pantry or Shopping List.

@@ -36,7 +36,7 @@ class BusinessDashboardActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         setupRecyclerViews()
-        fetchBusinessNameAndLoadData()
+        fetchBusinessInfoAndLoadData()
         setupBottomNavigation()
         setupClickListeners()
     }
@@ -59,19 +59,17 @@ class BusinessDashboardActivity : AppCompatActivity() {
         binding.rvLowStockItems.adapter = lowStockAdapter
     }
 
-    private fun fetchBusinessNameAndLoadData() {
+    private fun fetchBusinessInfoAndLoadData() {
         val uid = auth.currentUser?.uid ?: return
         firestore.collection("users").document(uid).get()
             .addOnSuccessListener { document ->
-                val name = document.getString("businessName")?.trim()
-                if (!name.isNullOrEmpty()) {
-                    businessName = name
+                businessName = document.getString("businessName")?.trim()
+                if (!businessName.isNullOrEmpty()) {
                     loadInventoryStats()
                     loadActiveOrders()
                 } else {
                     Toast.makeText(this, "Set Business Name in Profile first", Toast.LENGTH_SHORT).show()
                     binding.tvTotalItems.text = "0"
-                    binding.tvLowStock.text = "0"
                 }
             }
             .addOnFailureListener {
@@ -80,9 +78,9 @@ class BusinessDashboardActivity : AppCompatActivity() {
     }
 
     private fun loadInventoryStats() {
-        val biz = businessName ?: return
-        // Path should be Businesses/[BusinessName]/inventory
-        database.child("Businesses").child(biz).child("inventory")
+        val uid = auth.currentUser?.uid ?: return
+        // Using UID as the key based on the database structure screenshot
+        database.child("Businesses").child(uid).child("inventory")
             .addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     var totalCount = 0
@@ -92,24 +90,22 @@ class BusinessDashboardActivity : AppCompatActivity() {
                         val item = child.getValue(InventoryItem::class.java)
                         if (item != null) {
                             totalCount++
-                            // Threshold updated to 30
-                            if (item.stock < 30) {
+                            if (item.stock < 50) {
                                 allLowStock.add(item)
                             }
                         }
                     }
                     
                     binding.tvTotalItems.text = totalCount.toString()
-                    binding.tvLowStock.text = allLowStock.size.toString()
+                    binding.tvLowStockAlertTitle.text = "Low Stock Alerts (${allLowStock.size})"
+                    binding.cvLowStock.visibility = View.GONE
                     
-                    // Show top 6 lowest stock items on dashboard
                     lowStockItems.clear()
                     allLowStock.sortBy { it.stock }
-                    lowStockItems.addAll(allLowStock.take(6))
+                    lowStockItems.addAll(allLowStock.take(10))
                     lowStockAdapter.notifyDataSetChanged()
                     
-                    // Show "See More" if there are more than 6 low stock items
-                    binding.tvSeeMoreLowStock.visibility = if (allLowStock.size > 6) View.VISIBLE else View.GONE
+                    binding.tvSeeMoreLowStock.visibility = if (allLowStock.size > 10) View.VISIBLE else View.GONE
                     binding.rlLowStockListHeader.visibility = if (allLowStock.isEmpty()) View.GONE else View.VISIBLE
                 }
                 override fun onCancelled(error: DatabaseError) {
@@ -119,14 +115,12 @@ class BusinessDashboardActivity : AppCompatActivity() {
     }
 
     private fun loadActiveOrders() {
-        val biz = businessName ?: return
-        // Ensure path matches save logic: BusinessOrders/[BusinessName]
-        database.child("BusinessOrders").child(biz).addValueEventListener(object : ValueEventListener {
+        val uid = auth.currentUser?.uid ?: return
+        database.child("BusinessOrders").child(uid).addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 activeOrders.clear()
                 for (child in snapshot.children) {
                     val order = child.getValue(Order::class.java)
-                    // Show all latest orders that are not yet completed or declined
                     if (order != null && order.status != "Completed" && order.status != "Declined") {
                         if (order.id.isEmpty()) order.id = child.key ?: ""
                         activeOrders.add(order)
@@ -146,11 +140,6 @@ class BusinessDashboardActivity : AppCompatActivity() {
     private fun setupClickListeners() {
         binding.cvTotalItems.setOnClickListener {
             startActivity(Intent(this, BusinessInventoryActivity::class.java))
-        }
-        binding.cvLowStock.setOnClickListener {
-            startActivity(Intent(this, BusinessInventoryActivity::class.java).apply {
-                putExtra("FILTER_LOW_STOCK", true)
-            })
         }
         binding.tvSeeMoreLowStock.setOnClickListener {
             startActivity(Intent(this, BusinessInventoryActivity::class.java).apply {
@@ -200,6 +189,7 @@ class BusinessDashboardActivity : AppCompatActivity() {
         class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val tvItemName: TextView = view.findViewById(R.id.tvItemName)
             val tvStockCount: TextView = view.findViewById(R.id.tvStockCount)
+            val tvItemDetails: TextView = view.findViewById(R.id.tvItemDetails)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -211,6 +201,7 @@ class BusinessDashboardActivity : AppCompatActivity() {
             val item = items[position]
             holder.tvItemName.text = item.name
             holder.tvStockCount.text = "${item.stock} left"
+            holder.tvItemDetails.text = "${item.size} • ₱${String.format(Locale.getDefault(), "%.2f", item.price)}"
             holder.itemView.setOnClickListener { onItemClick() }
         }
 
@@ -226,6 +217,8 @@ class BusinessDashboardActivity : AppCompatActivity() {
             val tvOrderId: TextView = view.findViewById(R.id.tvOrderId)
             val tvOrderDate: TextView = view.findViewById(R.id.tvOrderDate)
             val tvOrderDetails: TextView = view.findViewById(R.id.tvOrderDetails)
+            val tvCustomerName: TextView = view.findViewById(R.id.tvCustomerName)
+            val tvOrderStatusBrief: TextView = view.findViewById(R.id.tvOrderStatusBrief)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -241,6 +234,20 @@ class BusinessDashboardActivity : AppCompatActivity() {
             
             val itemsText = order.items.joinToString(", ") { it.brandName.ifEmpty { it.name } }
             holder.tvOrderDetails.text = itemsText
+
+            holder.tvOrderStatusBrief.text = order.status
+            
+            // FETCH CUSTOMER NAME from Firestore
+            holder.tvCustomerName.text = "Loading..."
+            val firestore = FirebaseFirestore.getInstance()
+            firestore.collection("users").document(order.userId).get()
+                .addOnSuccessListener { doc ->
+                    val fullName = doc.getString("fullName") ?: "Unknown User"
+                    holder.tvCustomerName.text = fullName
+                }
+                .addOnFailureListener {
+                    holder.tvCustomerName.text = "User #${order.userId.takeLast(4)}"
+                }
 
             holder.itemView.setOnClickListener { onItemClick() }
         }

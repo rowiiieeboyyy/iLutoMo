@@ -38,6 +38,16 @@
         </RelativeLayout>
 
         <TextView
+            android:id="@+id/tvCustomerName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Customer Name"
+            android:textColor="#2E5A27"
+            android:textStyle="bold"
+            android:textSize="13sp" />
+
+        <TextView
             android:id="@+id/tvOrderDetails"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -47,6 +57,20 @@
             android:text="Item 1, Item 2, Item 3..."
             android:textColor="#555555"
             android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tvOrderStatusBrief"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_gravity="end"
+            android:background="#E8F5E9"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="2dp"
+            android:text="Pending"
+            android:textColor="#4B8A34"
+            android:textSize="10sp"
+            android:textStyle="bold" />
 
     </LinearLayout>
 </androidx.cardview.widget.CardView>

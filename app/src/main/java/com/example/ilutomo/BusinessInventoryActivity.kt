@@ -53,29 +53,32 @@ class BusinessInventoryActivity : AppCompatActivity() {
         setupRecyclerView()
         loadIngredients()
         
-        fetchBusinessNameAndLoadInventory()
+        // START LOADING IMMEDIATELY using UID
+        loadInventory()
+        fetchBusinessInfo()
         
         setupBottomNavigation()
 
         binding.fabAddItem.setOnClickListener {
             if (businessName.isNullOrEmpty()) {
-                Toast.makeText(this, "Set Business Name in Profile first", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Business Name not found. Please update Profile.", Toast.LENGTH_LONG).show()
             } else {
                 showAddItemDialog()
             }
         }
     }
 
-    private fun fetchBusinessNameAndLoadInventory() {
+    private fun fetchBusinessInfo() {
         val uid = auth.currentUser?.uid ?: return
         firestore.collection("users").document(uid).get()
             .addOnSuccessListener { document ->
-                businessName = document.getString("businessName")
-                if (!businessName.isNullOrEmpty()) {
-                    loadInventory()
-                } else {
-                    binding.tvEmptyInventory.text = "Set Business Name in Profile first"
-                    binding.tvEmptyInventory.visibility = View.VISIBLE
+                businessName = document.getString("businessName")?.trim()
+                if (businessName.isNullOrEmpty()) {
+                    // Fallback to RTDB if Firestore is empty
+                    database.child("Businesses").child(uid).child("details").child("businessName")
+                        .get().addOnSuccessListener { snapshot ->
+                            businessName = snapshot.value?.toString()?.trim()
+                        }
                 }
             }
     }
@@ -102,12 +105,12 @@ class BusinessInventoryActivity : AppCompatActivity() {
     }
 
     private fun confirmDelete(item: InventoryItem) {
-        val biz = businessName ?: return
+        val uid = auth.currentUser?.uid ?: return
         AlertDialog.Builder(this)
             .setTitle("Delete Item")
             .setMessage("Are you sure you want to delete ${item.name}?")
             .setPositiveButton("Delete") { _, _ ->
-                database.child("Businesses").child(biz).child("inventory").child(item.name).removeValue()
+                database.child("Businesses").child(uid).child("inventory").child(item.name).removeValue()
                     .addOnSuccessListener { Toast.makeText(this, "Item deleted", Toast.LENGTH_SHORT).show() }
             }
             .setNegativeButton("Cancel", null)
@@ -191,7 +194,7 @@ class BusinessInventoryActivity : AppCompatActivity() {
     }
 
     private fun updateDatabase(oldItemName: String, ingredient: String, newItemName: String, stock: Int, size: String, price: Double, imageUrl: String, dialog: AlertDialog) {
-        val biz = businessName ?: return
+        val uid = auth.currentUser?.uid ?: return
         val updatedItem = mapOf(
             "ingredient" to ingredient,
             "name" to newItemName,
@@ -203,10 +206,10 @@ class BusinessInventoryActivity : AppCompatActivity() {
         )
 
         if (oldItemName != newItemName) {
-            database.child("Businesses").child(biz).child("inventory").child(oldItemName).removeValue()
+            database.child("Businesses").child(uid).child("inventory").child(oldItemName).removeValue()
         }
 
-        database.child("Businesses").child(biz).child("inventory").child(newItemName).updateChildren(updatedItem)
+        database.child("Businesses").child(uid).child("inventory").child(newItemName).updateChildren(updatedItem)
             .addOnSuccessListener {
                 Toast.makeText(this, "Item updated!", Toast.LENGTH_SHORT).show()
                 dialog.dismiss()
@@ -214,8 +217,9 @@ class BusinessInventoryActivity : AppCompatActivity() {
     }
 
     private fun loadInventory() {
-        val biz = businessName ?: return
-        database.child("Businesses").child(biz).child("inventory").addValueEventListener(object : ValueEventListener {
+        val uid = auth.currentUser?.uid ?: return
+        // Screenshot confirms path: Businesses/[UID]/inventory
+        database.child("Businesses").child(uid).child("inventory").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 inventoryItems.clear()
                 for (child in snapshot.children) {
@@ -226,7 +230,13 @@ class BusinessInventoryActivity : AppCompatActivity() {
                 }
                 inventoryItems.sortByDescending { it.timestamp }
                 adapter.notifyDataSetChanged()
-                binding.tvEmptyInventory.visibility = if (inventoryItems.isEmpty()) View.VISIBLE else View.GONE
+                
+                if (inventoryItems.isEmpty()) {
+                    binding.tvEmptyInventory.text = "Inventory is empty"
+                    binding.tvEmptyInventory.visibility = View.VISIBLE
+                } else {
+                    binding.tvEmptyInventory.visibility = View.GONE
+                }
             }
 
             override fun onCancelled(error: DatabaseError) {
@@ -321,7 +331,7 @@ class BusinessInventoryActivity : AppCompatActivity() {
     }
 
     private fun saveToDatabase(ingredient: String, itemName: String, stock: Int, size: String, price: Double, imageUrl: String, dialog: AlertDialog) {
-        val biz = businessName ?: return
+        val uid = auth.currentUser?.uid ?: return
         val newItem = InventoryItem(
             ingredient = ingredient,
             name = itemName,
@@ -332,7 +342,7 @@ class BusinessInventoryActivity : AppCompatActivity() {
             timestamp = System.currentTimeMillis()
         )
 
-        database.child("Businesses").child(biz).child("inventory").child(itemName).setValue(newItem)
+        database.child("Businesses").child(uid).child("inventory").child(itemName).setValue(newItem)
             .addOnSuccessListener {
                 Toast.makeText(this, "Item added!", Toast.LENGTH_SHORT).show()
                 dialog.dismiss()
