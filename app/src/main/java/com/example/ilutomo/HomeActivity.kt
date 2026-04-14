@@ -30,6 +30,7 @@ class HomeActivity : AppCompatActivity() {
     private var customAllergen = ""
     private var searchQuery = ""
 
+    // Filter Variables
     private var budgetMin = 0.0; var budgetMax = 10000.0
     private var proteinMin = 0.0; var proteinMax = 1000.0
     private var carbsMax = 1000.0
@@ -86,6 +87,14 @@ class HomeActivity : AppCompatActivity() {
         binding.tvWelcome.text = "$greeting, $name!"
     }
 
+    // CRITICAL FIX: Aggressive parsing for manual User Inputs
+    private fun toFilterDouble(value: Any?, default: Double): Double {
+        if (value == null) return default
+        val stringVal = value.toString().trim()
+        if (stringVal.isEmpty()) return default
+        return stringVal.toDoubleOrNull() ?: default
+    }
+
     private fun fetchPreferences() {
         val uid = auth.currentUser?.uid ?: return
         database.child("Users").child(uid).child("Preferences")
@@ -93,13 +102,17 @@ class HomeActivity : AppCompatActivity() {
                 override fun onDataChange(s: DataSnapshot) {
                     if (s.exists()) {
                         userDiet = s.child("dietary_type").value?.toString() ?: "Standard"
-                        budgetMin = s.child("budget_min").value?.toString()?.toDoubleOrNull() ?: 0.0
-                        budgetMax = s.child("budget_max").value?.toString()?.toDoubleOrNull() ?: 10000.0
-                        proteinMin = s.child("protein_min").value?.toString()?.toDoubleOrNull() ?: 0.0
-                        proteinMax = s.child("protein_max").value?.toString()?.toDoubleOrNull() ?: 1000.0
-                        carbsMax = s.child("carbs_max").value?.toString()?.toDoubleOrNull() ?: 1000.0
-                        sugarMax = s.child("sugar_max").value?.toString()?.toDoubleOrNull() ?: 1000.0
-                        caloriesMax = s.child("calories_max").value?.toString()?.toDoubleOrNull() ?: 10000.0
+
+                        budgetMin = toFilterDouble(s.child("budget_min").value, 0.0)
+                        budgetMax = toFilterDouble(s.child("budget_max").value, 10000.0)
+
+                        proteinMin = toFilterDouble(s.child("protein_min").value, 0.0)
+                        proteinMax = toFilterDouble(s.child("protein_max").value, 1000.0)
+
+                        // Strict Ceiling Logic: Default to high if user enters 0 or invalid
+                        carbsMax = toFilterDouble(s.child("carbs_max").value, 1000.0).let { if (it <= 0) 1000.0 else it }
+                        sugarMax = toFilterDouble(s.child("sugar_max").value, 1000.0).let { if (it <= 0) 1000.0 else it }
+                        caloriesMax = toFilterDouble(s.child("calories_max").value, 10000.0).let { if (it <= 0) 10000.0 else it }
 
                         activeAllergens.clear()
                         val algNode = s.child("allergens")
@@ -126,8 +139,6 @@ class HomeActivity : AppCompatActivity() {
 
                             var pro = 0.0; var carb = 0.0; var sug = 0.0; var cal = 0.0; var sod = 0.0
                             var totalPrice = 0.0
-
-                            // Initialize new maps for individual tracking
                             val individualPrices = mutableMapOf<String, Double>()
 
                             r.ingredients?.forEach { (name, amt) ->
@@ -136,23 +147,21 @@ class HomeActivity : AppCompatActivity() {
                                     val qty = amt.toString().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0
                                     val factor = if (name.contains("Egg", true)) qty else (qty / 50.0)
 
-                                    pro += factor * (lib.child("pro").value?.toString()?.toDoubleOrNull() ?: 0.0)
-                                    carb += factor * (lib.child("carb").value?.toString()?.toDoubleOrNull() ?: 0.0)
-                                    sug += factor * (lib.child("sugar").value?.toString()?.toDoubleOrNull() ?: 0.0)
-                                    cal += factor * (lib.child("cal").value?.toString()?.toDoubleOrNull() ?: 0.0)
-                                    sod += factor * (lib.child("sodium").value?.toString()?.toDoubleOrNull() ?: 0.0)
+                                    pro += factor * toFilterDouble(lib.child("pro").value, 0.0)
+                                    carb += factor * toFilterDouble(lib.child("carb").value, 0.0)
+                                    sug += factor * toFilterDouble(lib.child("sugar").value, 0.0)
+                                    cal += factor * toFilterDouble(lib.child("cal").value, 0.0)
+                                    sod += factor * toFilterDouble(lib.child("sodium").value, 0.0)
 
-                                    // CALCULATE PRICE
-                                    val standardPrice = lib.child("price").value?.toString()?.toDoubleOrNull() ?: 0.0
+                                    val standardPrice = toFilterDouble(lib.child("price").value, 0.0)
                                     val ingredientCost = standardPrice * (qty / 100.0)
-
                                     totalPrice += ingredientCost
-                                    individualPrices[name] = ingredientCost // Store individual price
+                                    individualPrices[name] = ingredientCost
                                 }
                             }
 
                             r.calculatedPrice = totalPrice
-                            r.ingredientPrices = individualPrices // Save the breakdown to the recipe object
+                            r.ingredientPrices = individualPrices
 
                             r.calculatedMacros["Protein"] = pro.toInt()
                             r.calculatedMacros["Carbs"] = carb.toInt()
@@ -176,9 +185,25 @@ class HomeActivity : AppCompatActivity() {
         filteredList.clear()
         val baseFiltered = allRecipes.filter { r ->
             if (!isRecipeSafeForUser(r)) return@filter false
+
             val matchesBudget = r.calculatedPrice in budgetMin..budgetMax
+
+            // Get current recipe values from the map
+            val p = r.calculatedMacros["Protein"]?.toDouble() ?: 0.0
+            val c = r.calculatedMacros["Carbs"]?.toDouble() ?: 0.0
+            val s = r.calculatedMacros["Sugar"]?.toDouble() ?: 0.0
+            val cal = r.calculatedMacros["Calories"]?.toDouble() ?: 0.0
+
+            // STRICT Comparison
+            val matchesProtein = p >= proteinMin && p <= proteinMax
+            val matchesCarbs = c <= carbsMax
+            val matchesSugar = s <= sugarMax
+            val matchesCalories = cal <= caloriesMax
+
+            val matchesMacros = matchesProtein && matchesCarbs && matchesSugar && matchesCalories
             val matchesSearch = if (searchQuery.isEmpty()) true else r.title.contains(searchQuery, true)
-            matchesBudget && matchesSearch
+
+            matchesBudget && matchesMacros && matchesSearch
         }
         filteredList.addAll(baseFiltered)
         recipeAdapter.notifyDataSetChanged()
