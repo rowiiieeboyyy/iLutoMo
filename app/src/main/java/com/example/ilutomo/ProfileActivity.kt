@@ -2,6 +2,8 @@ package com.example.ilutomo
 
 import android.content.Intent
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
 import android.widget.CheckBox
 import android.widget.EditText
@@ -63,29 +65,65 @@ class ProfileActivity : AppCompatActivity() {
     private fun syncRangeSlider(checkBox: CheckBox, slider: RangeSlider, editText: EditText) {
         slider.labelBehavior = LabelFormatter.LABEL_FLOATING
         slider.setLabelFormatter { it.toInt().toString() }
+
         checkBox.setOnCheckedChangeListener { _, isChecked ->
             slider.isEnabled = isChecked
             editText.visibility = if (isChecked) View.VISIBLE else View.GONE
             updateSummaryUI()
         }
-        slider.addOnChangeListener { s, _, _ ->
-            updateSummaryUI()
-            editText.setText(s.values[1].toInt().toString())
+
+        // Update Text when Slider moves
+        slider.addOnChangeListener { s, _, fromUser ->
+            if (fromUser) {
+                editText.setText(s.values[1].toInt().toString())
+                updateSummaryUI()
+            }
         }
+
+        // Move Slider when Text is typed
+        editText.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) {
+                val input = s.toString().toFloatOrNull() ?: 0f
+                if (input in slider.valueFrom..slider.valueTo) {
+                    slider.values = listOf(slider.values[0], input)
+                    updateSummaryUI()
+                }
+            }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
     }
 
     private fun syncSingleSlider(checkBox: CheckBox, slider: Slider, editText: EditText) {
         slider.labelBehavior = LabelFormatter.LABEL_FLOATING
         slider.setLabelFormatter { it.toInt().toString() }
+
         checkBox.setOnCheckedChangeListener { _, isChecked ->
             slider.isEnabled = isChecked
             editText.visibility = if (isChecked) View.VISIBLE else View.GONE
             updateSummaryUI()
         }
-        slider.addOnChangeListener { s, _, _ ->
-            updateSummaryUI()
-            editText.setText(s.value.toInt().toString())
+
+        // Update Text when Slider moves
+        slider.addOnChangeListener { s, _, fromUser ->
+            if (fromUser) {
+                editText.setText(s.value.toInt().toString())
+                updateSummaryUI()
+            }
         }
+
+        // Move Slider when Text is typed
+        editText.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) {
+                val input = s.toString().toFloatOrNull() ?: 0f
+                if (input in slider.valueFrom..slider.valueTo) {
+                    slider.value = input
+                    updateSummaryUI()
+                }
+            }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
     }
 
     private fun updateSummaryUI() {
@@ -126,16 +164,16 @@ class ProfileActivity : AppCompatActivity() {
             )
         )
 
-        // If Checked, use the slider value. If Unchecked, save a high value to ignore the filter.
+        // READ FROM EDITTEXT PREFERENTIALLY TO CAPTURE MANUAL INPUTS
         prefs["budget_min"] = if (binding.checkBudget.isChecked) binding.rangeBudget.values[0].toInt() else 0
-        prefs["budget_max"] = if (binding.checkBudget.isChecked) binding.rangeBudget.values[1].toInt() else 10000
+        prefs["budget_max"] = if (binding.checkBudget.isChecked) (binding.etBudgetInput.text.toString().toIntOrNull() ?: binding.rangeBudget.values[1].toInt()) else 10000
 
         prefs["protein_min"] = if (binding.checkProtein.isChecked) binding.rangeProtein.values[0].toInt() else 0
-        prefs["protein_max"] = if (binding.checkProtein.isChecked) binding.rangeProtein.values[1].toInt() else 1000
+        prefs["protein_max"] = if (binding.checkProtein.isChecked) (binding.etProteinInput.text.toString().toIntOrNull() ?: binding.rangeProtein.values[1].toInt()) else 1000
 
-        prefs["carbs_max"] = if (binding.checkCarbs.isChecked) binding.rangeCarbs.value.toInt() else 1000
-        prefs["sugar_max"] = if (binding.checkSugar.isChecked) binding.rangeSugar.value.toInt() else 1000
-        prefs["calories_max"] = if (binding.checkCalories.isChecked) binding.rangeCalories.value.toInt() else 10000
+        prefs["carbs_max"] = if (binding.checkCarbs.isChecked) (binding.etCarbsInput.text.toString().toIntOrNull() ?: 1000) else 1000
+        prefs["sugar_max"] = if (binding.checkSugar.isChecked) (binding.etSugarInput.text.toString().toIntOrNull() ?: 1000) else 1000
+        prefs["calories_max"] = if (binding.checkCalories.isChecked) (binding.etCaloriesInput.text.toString().toIntOrNull() ?: 10000) else 10000
 
         database.child("Users").child(uid).child("Preferences").setValue(prefs)
             .addOnSuccessListener {
@@ -154,27 +192,29 @@ class ProfileActivity : AppCompatActivity() {
                 binding.cbPescatarian.isChecked = diet == "Pescatarian"
                 binding.cbStandard.isChecked = (diet == "Standard" || diet == "null")
 
-                fun restoreRange(slider: RangeSlider, check: CheckBox, key: String, defaultMax: Float) {
+                fun restoreRange(slider: RangeSlider, check: CheckBox, editText: EditText, key: String, defaultMax: Float) {
                     val min = snapshot.child("${key}_min").value?.toString()?.toFloatOrNull() ?: 0f
                     val max = snapshot.child("${key}_max").value?.toString()?.toFloatOrNull() ?: defaultMax
                     if (max < defaultMax) {
                         check.isChecked = true
                         slider.values = listOf(min, max)
+                        editText.setText(max.toInt().toString())
                     }
                 }
-                restoreRange(binding.rangeBudget, binding.checkBudget, "budget", 10000f)
-                restoreRange(binding.rangeProtein, binding.checkProtein, "protein", 1000f)
+                restoreRange(binding.rangeBudget, binding.checkBudget, binding.etBudgetInput, "budget", 10000f)
+                restoreRange(binding.rangeProtein, binding.checkProtein, binding.etProteinInput, "protein", 1000f)
 
-                fun restoreSingle(slider: Slider, check: CheckBox, key: String, defaultMax: Float) {
+                fun restoreSingle(slider: Slider, check: CheckBox, editText: EditText, key: String, defaultMax: Float) {
                     val max = snapshot.child("${key}_max").value?.toString()?.toFloatOrNull() ?: defaultMax
                     if (max < defaultMax) {
                         check.isChecked = true
                         slider.value = max
+                        editText.setText(max.toInt().toString())
                     }
                 }
-                restoreSingle(binding.rangeCarbs, binding.checkCarbs, "carbs", 1000f)
-                restoreSingle(binding.rangeSugar, binding.checkSugar, "sugar", 1000f)
-                restoreSingle(binding.rangeCalories, binding.checkCalories, "calories", 10000f)
+                restoreSingle(binding.rangeCarbs, binding.checkCarbs, binding.etCarbsInput, "carbs", 1000f)
+                restoreSingle(binding.rangeSugar, binding.checkSugar, binding.etSugarInput, "sugar", 1000f)
+                restoreSingle(binding.rangeCalories, binding.checkCalories, binding.etCaloriesInput, "calories", 10000f)
 
                 val alg = snapshot.child("allergens")
                 binding.cbSoy.isChecked = alg.child("Soy").value == true

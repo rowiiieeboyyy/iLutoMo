@@ -29,13 +29,13 @@ class BusinessInventoryActivity : AppCompatActivity() {
     private val storage = FirebaseStorage.getInstance().reference
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
-    
+
     private val ingredientList = mutableListOf<String>()
     private val inventoryItems = mutableListOf<InventoryItem>()
     private lateinit var adapter: InventoryAdapter
     private var selectedImageUri: Uri? = null
     private var dialogItemImageView: android.widget.ImageView? = null
-    
+
     private var businessName: String? = null
 
     private val imagePickerLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -52,9 +52,7 @@ class BusinessInventoryActivity : AppCompatActivity() {
 
         setupRecyclerView()
         loadIngredients()
-        
         fetchBusinessNameAndLoadInventory()
-        
         setupBottomNavigation()
 
         binding.fabAddItem.setOnClickListener {
@@ -105,9 +103,10 @@ class BusinessInventoryActivity : AppCompatActivity() {
         val biz = businessName ?: return
         AlertDialog.Builder(this)
             .setTitle("Delete Item")
-            .setMessage("Are you sure you want to delete ${item.itemName}?")
+            .setMessage("Are you sure you want to delete ${item.name}?")
             .setPositiveButton("Delete") { _, _ ->
-                database.child("Businesses").child(biz).child("inventory").child(item.itemName).removeValue()
+                // Use item.name because that is the key in Firebase
+                database.child("Businesses").child(biz).child("inventory").child(item.name).removeValue()
                     .addOnSuccessListener { Toast.makeText(this, "Item deleted", Toast.LENGTH_SHORT).show() }
             }
             .setNegativeButton("Cancel", null)
@@ -122,12 +121,12 @@ class BusinessInventoryActivity : AppCompatActivity() {
 
         dialogBinding.tvDialogTitle.text = "Edit Inventory Item"
         dialogBinding.actvIngredient.setText(item.ingredient)
-        dialogBinding.etItemName.setText(item.itemName)
+        dialogBinding.etItemName.setText(item.name) // Fixed: .name
         dialogBinding.etStock.setText(item.stock.toString())
         dialogBinding.etPrice.setText(item.price.toString())
 
         val sizeParts = item.size.split(" ")
-        if (sizeParts.size == 2) {
+        if (sizeParts.size >= 2) {
             dialogBinding.etSizeValue.setText(sizeParts[0])
             val unit = sizeParts[1]
             val units = resources.getStringArray(R.array.size_units)
@@ -140,8 +139,8 @@ class BusinessInventoryActivity : AppCompatActivity() {
         dialogItemImageView = dialogBinding.ivItemImage
         selectedImageUri = null
 
-        if (item.imageUrl.isNotEmpty()) {
-            Glide.with(this).load(item.imageUrl).placeholder(R.drawable.placeholder_food).into(dialogBinding.ivItemImage)
+        if (item.img.isNotEmpty()) { // Fixed: .img
+            Glide.with(this).load(item.img).placeholder(R.drawable.placeholder_food).into(dialogBinding.ivItemImage)
         }
 
         dialogBinding.btnAddPhoto.setOnClickListener {
@@ -158,7 +157,6 @@ class BusinessInventoryActivity : AppCompatActivity() {
 
         dialogBinding.btnFinish.setOnClickListener {
             val ingredient = dialogBinding.actvIngredient.text.toString().trim()
-            
             if (!ingredientList.contains(ingredient)) {
                 Toast.makeText(this, "Please select an ingredient from the list", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -181,12 +179,11 @@ class BusinessInventoryActivity : AppCompatActivity() {
             val size = "$sizeValue $unit"
 
             if (selectedImageUri != null) {
-                uploadImageAndSave(ingredient, itemName, stock, size, price, dialog, item.itemName)
+                uploadImageAndSave(ingredient, itemName, stock, size, price, dialog, item.name)
             } else {
-                updateDatabase(item.itemName, ingredient, itemName, stock, size, price, item.imageUrl, dialog)
+                updateDatabase(item.name, ingredient, itemName, stock, size, price, item.img, dialog)
             }
         }
-
         dialog.show()
     }
 
@@ -194,11 +191,11 @@ class BusinessInventoryActivity : AppCompatActivity() {
         val biz = businessName ?: return
         val updatedItem = mapOf(
             "ingredient" to ingredient,
-            "itemName" to newItemName,
+            "name" to newItemName, // Fixed: key is "name"
             "stock" to stock,
             "size" to size,
             "price" to price,
-            "imageUrl" to imageUrl,
+            "img" to imageUrl, // Fixed: key is "img"
             "timestamp" to System.currentTimeMillis()
         )
 
@@ -256,13 +253,8 @@ class BusinessInventoryActivity : AppCompatActivity() {
         dialogItemImageView = dialogBinding.ivItemImage
         selectedImageUri = null
 
-        dialogBinding.ivCloseDialog.setOnClickListener {
-            dialog.dismiss()
-        }
-
-        dialogBinding.btnAddPhoto.setOnClickListener {
-            imagePickerLauncher.launch("image/*")
-        }
+        dialogBinding.ivCloseDialog.setOnClickListener { dialog.dismiss() }
+        dialogBinding.btnAddPhoto.setOnClickListener { imagePickerLauncher.launch("image/*") }
 
         val autocompleteAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, ingredientList)
         dialogBinding.actvIngredient.setAdapter(autocompleteAdapter)
@@ -270,7 +262,6 @@ class BusinessInventoryActivity : AppCompatActivity() {
 
         dialogBinding.btnFinish.setOnClickListener {
             val ingredient = dialogBinding.actvIngredient.text.toString().trim()
-            
             if (!ingredientList.contains(ingredient)) {
                 Toast.makeText(this, "Please select an ingredient from the list", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -297,7 +288,6 @@ class BusinessInventoryActivity : AppCompatActivity() {
                 saveToDatabase(ingredient, itemName, stock, "$sizeValue $unit", price, "", dialog)
             }
         }
-
         dialog.show()
     }
 
@@ -324,11 +314,11 @@ class BusinessInventoryActivity : AppCompatActivity() {
         val biz = businessName ?: return
         val newItem = InventoryItem(
             ingredient = ingredient,
-            itemName = itemName,
+            name = itemName, // Fixed: matching models.kt
             stock = stock,
             size = size,
             price = price,
-            imageUrl = imageUrl,
+            img = imageUrl, // Fixed: matching models.kt
             timestamp = System.currentTimeMillis()
         )
 
