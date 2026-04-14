@@ -79,7 +79,7 @@ class BusinessDashboardActivity : AppCompatActivity() {
 
     private fun loadInventoryStats() {
         val uid = auth.currentUser?.uid ?: return
-        // Using UID as the key based on the database structure screenshot
+        // Using UID as the key based on the database structure
         database.child("Businesses").child(uid).child("inventory")
             .addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
@@ -97,8 +97,9 @@ class BusinessDashboardActivity : AppCompatActivity() {
                     }
                     
                     binding.tvTotalItems.text = totalCount.toString()
+                    binding.tvLowStock.text = allLowStock.size.toString()
                     binding.tvLowStockAlertTitle.text = "Low Stock Alerts (${allLowStock.size})"
-                    binding.cvLowStock.visibility = View.GONE
+                    binding.cvLowStock.visibility = View.VISIBLE
                     
                     lowStockItems.clear()
                     allLowStock.sortBy { it.stock }
@@ -140,6 +141,11 @@ class BusinessDashboardActivity : AppCompatActivity() {
     private fun setupClickListeners() {
         binding.cvTotalItems.setOnClickListener {
             startActivity(Intent(this, BusinessInventoryActivity::class.java))
+        }
+        binding.cvLowStock.setOnClickListener {
+            startActivity(Intent(this, BusinessInventoryActivity::class.java).apply {
+                putExtra("FILTER_LOW_STOCK", true)
+            })
         }
         binding.tvSeeMoreLowStock.setOnClickListener {
             startActivity(Intent(this, BusinessInventoryActivity::class.java).apply {

@@ -2,12 +2,15 @@ package com.example.ilutomo
 
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.Typeface
 import android.os.Bundle
-import android.view.Gravity
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
@@ -15,7 +18,7 @@ import java.util.*
 
 class PantryActivity : AppCompatActivity() {
 
-    private lateinit var llPantryList: LinearLayout
+    private lateinit var rvPantryList: RecyclerView
     private lateinit var llOrderSummaryItems: LinearLayout
     private lateinit var tvTotalPrice: TextView
     private lateinit var btnClearPantry: Button
@@ -24,16 +27,29 @@ class PantryActivity : AppCompatActivity() {
     private val database = FirebaseDatabase.getInstance().reference
     private val auth = FirebaseAuth.getInstance()
     private var pantryIngredients = mutableListOf<PantryIngredient>()
+    private lateinit var pantryAdapter: PantryAdapter
+
+    sealed class PantryListItem {
+        data class Header(val title: String) : PantryListItem()
+        data class Ingredient(val item: PantryIngredient) : PantryListItem()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_pantry)
 
-        llPantryList = findViewById(R.id.llPantryList)
+        rvPantryList = findViewById(R.id.rvPantryList)
         llOrderSummaryItems = findViewById(R.id.llOrderSummaryItems)
         tvTotalPrice = findViewById(R.id.tvTotalPrice)
         btnClearPantry = findViewById(R.id.btnClearPantry)
         btnGetIngredient = findViewById(R.id.btnGetIngredient)
+
+        rvPantryList.layoutManager = LinearLayoutManager(this)
+        pantryAdapter = PantryAdapter(mutableListOf(), 
+            onCheckChanged = { item, isChecked -> toggleIngredientCheck(item, isChecked) },
+            onUpdateCount = { item, change -> updateFirebaseItemCount(item, change) }
+        )
+        rvPantryList.adapter = pantryAdapter
 
         setupNavigation()
 
@@ -55,87 +71,43 @@ class PantryActivity : AppCompatActivity() {
                     pantryIngredients.add(ing)
                     groupedMap.getOrPut(ing.recipeTitle) { mutableListOf() }.add(ing)
                 }
-                updateUI(groupedMap)
+                
+                val listItems = mutableListOf<PantryListItem>()
+                for ((title, items) in groupedMap) {
+                    listItems.add(PantryListItem.Header(title))
+                    items.forEach { listItems.add(PantryListItem.Ingredient(it)) }
+                }
+                
+                pantryAdapter.updateData(listItems)
+                updateOrderSummary()
             }
             override fun onCancelled(error: DatabaseError) {}
         })
     }
 
-    private fun updateUI(groupedMap: Map<String, List<PantryIngredient>>) {
-        llPantryList.removeAllViews()
-        for ((title, items) in groupedMap) {
-            val tvHeader = TextView(this).apply {
-                text = title; textSize = 18f; setTypeface(null, Typeface.BOLD); setPadding(0, 20, 0, 10)
-                setTextColor(Color.parseColor("#1B3022"))
-            }
-            llPantryList.addView(tvHeader)
-
-            for (ing in items) {
-                val row = LinearLayout(this).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    setPadding(0, 10, 0, 10)
-                }
-
-                val cb = CheckBox(this).apply {
-                    isChecked = ing.isChecked
-                    setOnCheckedChangeListener { _, isChecked ->
-                        val uid = auth.currentUser?.uid ?: return@setOnCheckedChangeListener
-                        database.child("Users").child(uid).child("Pantry").child(ing.id).child("isChecked").setValue(isChecked)
-                    }
-                }
-
-                // UI FIX: Removed parentheses (amount). Now displays "Name xCount" clearly.
-                val tvInfo = TextView(this).apply {
-                    text = "${ing.name} x${ing.count}"
-                    layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
-                    setTextColor(Color.BLACK)
-                    textSize = 16f
-                }
-
-                val btnMinus = ImageButton(this).apply {
-                    setImageResource(android.R.drawable.ic_input_delete)
-                    setColorFilter(Color.RED)
-                    setBackgroundColor(Color.TRANSPARENT)
-                    setPadding(15, 10, 15, 10)
-                    setOnClickListener { updateFirebaseItemCount(ing, -1) }
-                }
-
-                val btnPlus = ImageButton(this).apply {
-                    setImageResource(android.R.drawable.ic_input_add)
-                    setColorFilter(Color.parseColor("#4B8A34"))
-                    setBackgroundColor(Color.TRANSPARENT)
-                    setPadding(15, 10, 15, 10)
-                    setOnClickListener { updateFirebaseItemCount(ing, 1) }
-                }
-
-                row.addView(cb)
-                row.addView(tvInfo)
-                row.addView(btnMinus)
-                row.addView(btnPlus)
-                llPantryList.addView(row)
-            }
-        }
+    private fun toggleIngredientCheck(ing: PantryIngredient, isChecked: Boolean) {
+        val uid = auth.currentUser?.uid ?: return
+        // Update local object immediately to avoid UI lag/flicker
+        ing.isChecked = isChecked
         updateOrderSummary()
+        
+        // Update Firebase
+        database.child("Users").child(uid).child("Pantry").child(ing.id).child("isChecked").setValue(isChecked)
     }
 
     private fun updateFirebaseItemCount(ing: PantryIngredient, change: Int) {
         val uid = auth.currentUser?.uid ?: return
-
         val currentC = if (ing.count <= 0) 1 else ing.count
         val newC = currentC + change
-
         if (newC <= 0) return
 
-        // Calculate single item price to adjust the total based on quantity
-        val singleItemPrice = ing.price / currentC
+        val singleItemPrice = if (currentC > 0) ing.price / currentC else 0.0
         val totalNewPrice = newC * singleItemPrice
 
         val updates = mapOf(
             "count" to newC,
             "price" to totalNewPrice
         )
-
         database.child("Users").child(uid).child("Pantry").child(ing.id).updateChildren(updates)
     }
 
@@ -217,5 +189,77 @@ class PantryActivity : AppCompatActivity() {
             .setMessage("Do you want to remove all items?")
             .setPositiveButton("Yes") { _, _ -> database.child("Users").child(uid).child("Pantry").removeValue() }
             .setNegativeButton("No", null).show()
+    }
+
+    class PantryAdapter(
+        private var items: List<PantryListItem>,
+        private val onCheckChanged: (PantryIngredient, Boolean) -> Unit,
+        private val onUpdateCount: (PantryIngredient, Int) -> Unit
+    ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+
+        companion object {
+            private const val TYPE_HEADER = 0
+            private const val TYPE_ITEM = 1
+        }
+
+        fun updateData(newItems: List<PantryListItem>) {
+            items = newItems
+            notifyDataSetChanged()
+        }
+
+        override fun getItemViewType(position: Int): Int {
+            return when (items[position]) {
+                is PantryListItem.Header -> TYPE_HEADER
+                is PantryListItem.Ingredient -> TYPE_ITEM
+            }
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+            return if (viewType == TYPE_HEADER) {
+                val view = LayoutInflater.from(parent.context).inflate(R.layout.item_pantry_header, parent, false)
+                HeaderViewHolder(view)
+            } else {
+                val view = LayoutInflater.from(parent.context).inflate(R.layout.item_pantry_ingredient, parent, false)
+                ItemViewHolder(view)
+            }
+        }
+
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+            val item = items[position]
+            if (holder is HeaderViewHolder && item is PantryListItem.Header) {
+                holder.tvHeader.text = item.title
+            } else if (holder is ItemViewHolder && item is PantryListItem.Ingredient) {
+                val ing = item.item
+                holder.tvName.text = ing.name
+                holder.tvCount.text = ing.count.toString()
+                
+                // CRITICAL FIX: Use setOnClickListener instead of setOnCheckedChangeListener
+                // to prevent programmatic state changes from triggering Firebase updates
+                // and causing the "recheck all" or jumping UI behavior.
+                holder.checkBox.setOnCheckedChangeListener(null)
+                holder.checkBox.isChecked = ing.isChecked
+                holder.checkBox.setOnClickListener {
+                    val isChecked = (it as CheckBox).isChecked
+                    onCheckChanged(ing, isChecked)
+                }
+
+                holder.btnPlus.setOnClickListener { onUpdateCount(ing, 1) }
+                holder.btnMinus.setOnClickListener { onUpdateCount(ing, -1) }
+            }
+        }
+
+        override fun getItemCount() = items.size
+
+        class HeaderViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+            val tvHeader: TextView = view.findViewById(R.id.tvPantryHeader)
+        }
+
+        class ItemViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+            val checkBox: CheckBox = view.findViewById(R.id.cbPantryIngredient)
+            val tvName: TextView = view.findViewById(R.id.tvPantryIngredientName)
+            val tvCount: TextView = view.findViewById(R.id.tvPantryIngredientCount)
+            val btnPlus: ImageButton = view.findViewById(R.id.btnPantryPlus)
+            val btnMinus: ImageButton = view.findViewById(R.id.btnPantryMinus)
+        }
     }
 }

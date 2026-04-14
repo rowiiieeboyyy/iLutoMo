@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingVertical="8dp"
+    android:paddingHorizontal="16dp">
+
+    <CheckBox
+        android:id="@+id/cbPantryIngredient"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minWidth="0dp"
+        android:minHeight="0dp" />
+
+    <TextView
+        android:id="@+id/tvPantryIngredientName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="8dp"
+        android:text="Ingredient Name"
+        android:textColor="#333333"
+        android:textSize="16sp" />
+
+    <ImageButton
+        android:id="@+id/btnPantryMinus"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:src="@android:drawable/ic_input_delete"
+        android:tint="#F44336"
+        android:padding="4dp"
+        android:scaleType="fitCenter"/>
+
+    <TextView
+        android:id="@+id/tvPantryIngredientCount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="1"
+        android:paddingHorizontal="8dp"
+        android:textColor="#333333"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <ImageButton
+        android:id="@+id/btnPantryPlus"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:src="@android:drawable/ic_input_add"
+        android:tint="#4B8A34"
+        android:padding="4dp"
+        android:scaleType="fitCenter"/>
+
+</LinearLayout>

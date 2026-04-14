@@ -193,13 +193,15 @@ class RecipesActivity : AppCompatActivity() {
             val scaledAmount = scaleAmount(ing.amount, multiplier)
             fullText.append("${ing.name} ($scaledAmount)\n\n")
 
-            val cleanName = ing.name.split("(")[0].trim()
-            val entry = ingredientLibrary.entries.find { it.key.equals(cleanName, true) }?.value
-            if (entry != null) {
-                val qtyNumeric = (ing.amount.replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0)
-                val scaledQty = qtyNumeric * multiplier
-                val standardPrice = entry["price"] ?: 0.0
-                calculatedTotalPrice += standardPrice * (scaledQty / 100.0)
+            if (ing.isChecked) {
+                val cleanName = ing.name.split("(")[0].trim()
+                val entry = ingredientLibrary.entries.find { it.key.equals(cleanName, true) }?.value
+                if (entry != null) {
+                    val qtyNumeric = (ing.amount.replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0)
+                    val scaledQty = qtyNumeric * multiplier
+                    val standardPrice = entry["price"] ?: 0.0
+                    calculatedTotalPrice += standardPrice * (scaledQty / 100.0)
+                }
             }
         }
 

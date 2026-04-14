@@ -37,23 +37,15 @@
         android:layout_marginTop="12dp"
         app:layout_constraintTop_toBottomOf="@id/tvPantryTitle" />
 
-    <ScrollView
-        android:id="@+id/svPantryContent"
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvPantryList"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_marginBottom="8dp"
+        android:padding="8dp"
+        android:clipToPadding="false"
         app:layout_constraintTop_toBottomOf="@id/pantryDivider"
-        app:layout_constraintBottom_toTopOf="@id/cvIngredientSummary">
-
-        <LinearLayout
-            android:id="@+id/llPantryList"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp">
-            <!-- Grouped ingredients will be added here -->
-        </LinearLayout>
-    </ScrollView>
+        app:layout_constraintBottom_toTopOf="@id/cvIngredientSummary" />
 
     <androidx.cardview.widget.CardView
         android:id="@+id/cvIngredientSummary"

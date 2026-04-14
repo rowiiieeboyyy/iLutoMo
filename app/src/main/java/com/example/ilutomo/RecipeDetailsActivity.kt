@@ -63,6 +63,8 @@ class RecipeDetailsActivity : AppCompatActivity() {
         }
 
         binding.fabAddToPantry.setOnClickListener { addToPantry(recipe) }
+        
+        binding.btnSaveRecipe.setOnClickListener { saveRecipeToMyList(recipe) }
 
         // Initial setup and data loading
         fetchUserLocationAndData(recipe)
@@ -223,5 +225,33 @@ class RecipeDetailsActivity : AppCompatActivity() {
             pantryRef.child(key).setValue(pantryItem)
         }
         Toast.makeText(this, "Added to Pantry for $multiplier serving(s)!", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun saveRecipeToMyList(recipe: Recipe) {
+        val uid = auth.currentUser?.uid ?: return
+        val savedRecipesRef = database.child("Users").child(uid).child("AddedRecipes")
+        
+        // Use title as key or push for unique entry. Push is safer for duplicates.
+        val key = savedRecipesRef.push().key ?: return
+        
+        // We create a clean copy for saving (resetting servants to 1 for standard save)
+        val saveMap = mapOf(
+            "id" to key,
+            "title" to recipe.title,
+            "description" to recipe.description,
+            "category" to recipe.category,
+            "imageResourceName" to recipe.imageResourceName,
+            "ingredients" to recipe.ingredients,
+            "steps" to recipe.steps,
+            "servings" to 1
+        )
+
+        savedRecipesRef.child(key).setValue(saveMap)
+            .addOnSuccessListener {
+                Toast.makeText(this, "Saved to My Recipes!", Toast.LENGTH_SHORT).show()
+            }
+            .addOnFailureListener {
+                Toast.makeText(this, "Failed to save recipe", Toast.LENGTH_SHORT).show()
+            }
     }
 }
