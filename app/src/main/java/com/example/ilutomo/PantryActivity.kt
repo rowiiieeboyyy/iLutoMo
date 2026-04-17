@@ -3,6 +3,7 @@ package com.example.ilutomo
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -11,6 +12,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
@@ -47,7 +49,8 @@ class PantryActivity : AppCompatActivity() {
         rvPantryList.layoutManager = LinearLayoutManager(this)
         pantryAdapter = PantryAdapter(mutableListOf(), 
             onCheckChanged = { item, isChecked -> toggleIngredientCheck(item, isChecked) },
-            onUpdateCount = { item, change -> updateFirebaseItemCount(item, change) }
+            onUpdateCount = { item, change -> updateFirebaseItemCount(item, change) },
+            onSwapAlternative = { item -> showAlternativesDialog(item) }
         )
         rvPantryList.adapter = pantryAdapter
 
@@ -57,6 +60,7 @@ class PantryActivity : AppCompatActivity() {
         btnClearPantry.setOnClickListener { showClearPantryConfirmation() }
 
         loadPantryIngredients()
+        checkBudgetAndAdjust()
     }
 
     private fun loadPantryIngredients() {
@@ -85,13 +89,173 @@ class PantryActivity : AppCompatActivity() {
         })
     }
 
+    private fun checkBudgetAndAdjust() {
+        val uid = auth.currentUser?.uid ?: return
+        database.child("Users").child(uid).child("Preferences").get().addOnSuccessListener { prefSnap ->
+            val budgetMax = prefSnap.child("budget_max").value?.toString()?.toDoubleOrNull() ?: 10000.0
+            database.child("Users").child(uid).child("Pantry").addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val currentItems = mutableListOf<PantryIngredient>()
+                    var currentTotal = 0.0
+                    for (child in snapshot.children) {
+                        val item = child.getValue(PantryIngredient::class.java) ?: continue
+                        if (item.isChecked) {
+                            currentTotal += item.price
+                            currentItems.add(item)
+                        }
+                    }
+
+                    if (currentTotal > budgetMax) {
+                        Toast.makeText(this@PantryActivity, "Over budget! Adjusting items...", Toast.LENGTH_LONG).show()
+                        findMinimalAdjustments(currentItems, currentTotal, budgetMax)
+                    }
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            })
+        }
+    }
+
+    private fun findMinimalAdjustments(items: List<PantryIngredient>, currentTotal: Double, budget: Double) {
+        val shortage = currentTotal - budget
+        database.child("Businesses").addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(bizSnapshot: DataSnapshot) {
+                val swapOptionsMap = mutableMapOf<String, List<InventoryItem>>()
+                items.forEach { item ->
+                    val tag = if (item.ingredientTag.isNotEmpty()) item.ingredientTag else item.name
+                    val options = mutableListOf<InventoryItem>()
+                    for (biz in bizSnapshot.children) {
+                        for (inv in biz.child("inventory").children) {
+                            val invItem = inv.getValue(InventoryItem::class.java) ?: continue
+                            if (invItem.ingredient.equals(tag, true) || invItem.ingredientTag.equals(tag, true)) {
+                                if (invItem.price * item.count < item.price) options.add(invItem)
+                            }
+                        }
+                    }
+                    swapOptionsMap[item.id] = options.sortedBy { it.price }
+                }
+
+                for (k in 1..items.size) {
+                    val result = findBestKCombination(items, swapOptionsMap, k, shortage)
+                    if (result != null) {
+                        applyAdjustments(result)
+                        return
+                    }
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        })
+    }
+
+    private fun findBestKCombination(items: List<PantryIngredient>, swapMap: Map<String, List<InventoryItem>>, k: Int, shortage: Double): Map<PantryIngredient, InventoryItem>? {
+        val swapableItems = items.filter { swapMap[it.id]?.isNotEmpty() == true }
+        if (swapableItems.size < k) return null
+        val combinations = getCombinations(swapableItems, k)
+        for (combo in combinations) {
+            var totalSavings = 0.0
+            val selectedSwaps = mutableMapOf<PantryIngredient, InventoryItem>()
+            for (item in combo) {
+                val cheapest = swapMap[item.id]?.firstOrNull() ?: continue
+                totalSavings += (item.price - (cheapest.price * item.count))
+                selectedSwaps[item] = cheapest
+            }
+            if (totalSavings >= shortage) return selectedSwaps
+        }
+        return null
+    }
+
+    private fun <T> getCombinations(list: List<T>, k: Int): List<List<T>> {
+        val result = mutableListOf<List<T>>()
+        fun combine(start: Int, current: MutableList<T>) {
+            if (current.size == k) {
+                result.add(ArrayList(current))
+                return
+            }
+            for (i in start until list.size) {
+                current.add(list[i])
+                combine(i + 1, current)
+                current.removeAt(current.size - 1)
+            }
+        }
+        combine(0, mutableListOf())
+        return result
+    }
+
+    private fun applyAdjustments(adjustments: Map<PantryIngredient, InventoryItem>) {
+        val uid = auth.currentUser?.uid ?: return
+        val updates = mutableMapOf<String, Any?>()
+        adjustments.forEach { (old, new) ->
+            val totalNewPrice = old.count * new.price
+            updates["${old.id}/name"] = new.getDisplayName()
+            updates["${old.id}/brandName"] = new.name
+            updates["${old.id}/price"] = totalNewPrice
+            updates["${old.id}/size"] = new.size
+            updates["${old.id}/itemGrade"] = new.itemGrade
+            updates["${old.id}/imageUrl"] = new.getDisplayImg()
+            updates["${old.id}/ingredientTag"] = (if (old.ingredientTag.isEmpty()) old.name else old.ingredientTag)
+        }
+        database.child("Users").child(uid).child("Pantry").updateChildren(updates)
+        Toast.makeText(this, "Minimal adjustments applied to fit budget", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showAlternativesDialog(pantryItem: PantryIngredient) {
+        val tag = if (pantryItem.ingredientTag.isNotEmpty()) pantryItem.ingredientTag else pantryItem.name
+        database.child("Businesses").addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val alternatives = mutableListOf<InventoryItem>()
+                for (bizSnapshot in snapshot.children) {
+                    val invNode = bizSnapshot.child("inventory")
+                    for (itemSnap in invNode.children) {
+                        val invItem = itemSnap.getValue(InventoryItem::class.java) ?: continue
+                        if (invItem.ingredient.equals(tag, true) || invItem.ingredientTag.equals(tag, true)) {
+                            alternatives.add(invItem)
+                        }
+                    }
+                }
+
+                if (alternatives.isEmpty()) {
+                    Toast.makeText(this@PantryActivity, "No alternatives found for $tag", Toast.LENGTH_SHORT).show()
+                    return
+                }
+
+                val options = alternatives.map { 
+                    val display = "${it.getDisplayName()} (${it.size}) - ₱${"%.2f".format(it.price)}"
+                    if (it.getDisplayName() == pantryItem.name) "$display (Current)" else display
+                }.toTypedArray()
+
+                AlertDialog.Builder(this@PantryActivity)
+                    .setTitle("Swap for $tag")
+                    .setItems(options) { _, which ->
+                        swapPantryItem(pantryItem, alternatives[which])
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        })
+    }
+
+    private fun swapPantryItem(oldItem: PantryIngredient, newItem: InventoryItem) {
+        val uid = auth.currentUser?.uid ?: return
+        val totalNewPrice = oldItem.count * newItem.price
+        val updates = mapOf(
+            "name" to newItem.getDisplayName(),
+            "brandName" to (newItem.name),
+            "price" to totalNewPrice,
+            "size" to newItem.size,
+            "imageUrl" to newItem.getDisplayImg(),
+            "itemGrade" to newItem.itemGrade,
+            "ingredientTag" to (if (oldItem.ingredientTag.isEmpty()) oldItem.name else oldItem.ingredientTag)
+        )
+        database.child("Users").child(uid).child("Pantry").child(oldItem.id).updateChildren(updates)
+            .addOnSuccessListener {
+                Toast.makeText(this, "Swapped to ${newItem.getDisplayName()}", Toast.LENGTH_SHORT).show()
+            }
+    }
+
     private fun toggleIngredientCheck(ing: PantryIngredient, isChecked: Boolean) {
         val uid = auth.currentUser?.uid ?: return
-        // Update local object immediately to avoid UI lag/flicker
         ing.isChecked = isChecked
         updateOrderSummary()
-        
-        // Update Firebase
         database.child("Users").child(uid).child("Pantry").child(ing.id).child("isChecked").setValue(isChecked)
     }
 
@@ -194,7 +358,8 @@ class PantryActivity : AppCompatActivity() {
     class PantryAdapter(
         private var items: List<PantryListItem>,
         private val onCheckChanged: (PantryIngredient, Boolean) -> Unit,
-        private val onUpdateCount: (PantryIngredient, Int) -> Unit
+        private val onUpdateCount: (PantryIngredient, Int) -> Unit,
+        private val onSwapAlternative: (PantryIngredient) -> Unit
     ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
         companion object {
@@ -232,10 +397,14 @@ class PantryActivity : AppCompatActivity() {
                 val ing = item.item
                 holder.tvName.text = ing.name
                 holder.tvCount.text = ing.count.toString()
+                holder.tvDetails.text = "${ing.size} • ₱${"%.2f".format(ing.price)}"
                 
-                // CRITICAL FIX: Use setOnClickListener instead of setOnCheckedChangeListener
-                // to prevent programmatic state changes from triggering Firebase updates
-                // and causing the "recheck all" or jumping UI behavior.
+                if (ing.imageUrl.isNotEmpty()) {
+                    Glide.with(holder.imageView.context).load(ing.imageUrl).placeholder(R.drawable.placeholder_food).into(holder.imageView)
+                } else {
+                    holder.imageView.setImageResource(R.drawable.placeholder_food)
+                }
+
                 holder.checkBox.setOnCheckedChangeListener(null)
                 holder.checkBox.isChecked = ing.isChecked
                 holder.checkBox.setOnClickListener {
@@ -245,6 +414,7 @@ class PantryActivity : AppCompatActivity() {
 
                 holder.btnPlus.setOnClickListener { onUpdateCount(ing, 1) }
                 holder.btnMinus.setOnClickListener { onUpdateCount(ing, -1) }
+                holder.tvSwap.setOnClickListener { onSwapAlternative(ing) }
             }
         }
 
@@ -256,10 +426,13 @@ class PantryActivity : AppCompatActivity() {
 
         class ItemViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val checkBox: CheckBox = view.findViewById(R.id.cbPantryIngredient)
+            val imageView: ImageView = view.findViewById(R.id.ivPantryIngredientImage)
             val tvName: TextView = view.findViewById(R.id.tvPantryIngredientName)
+            val tvDetails: TextView = view.findViewById(R.id.tvPantryIngredientDetails)
             val tvCount: TextView = view.findViewById(R.id.tvPantryIngredientCount)
             val btnPlus: ImageButton = view.findViewById(R.id.btnPantryPlus)
             val btnMinus: ImageButton = view.findViewById(R.id.btnPantryMinus)
+            val tvSwap: TextView = view.findViewById(R.id.tvSwapAlternative)
         }
     }
 }

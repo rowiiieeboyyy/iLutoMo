@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.widget.ImageView
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.bottomnavigation.BottomNavigationView
@@ -14,10 +15,8 @@ class DiaryActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_diary)
 
-        // Back button
         findViewById<ImageView>(R.id.btnBack)?.setOnClickListener { finish() }
 
-        // Open Edit Diary screen
         findViewById<TextView>(R.id.tvEditDiary)?.setOnClickListener {
             startActivity(Intent(this, EditDiaryActivity::class.java))
         }
@@ -27,15 +26,33 @@ class DiaryActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Load saved values from SharedPreferences
-        val sharedPref = getSharedPreferences("DiaryPrefs", Context.MODE_PRIVATE)
+        loadDiaryData()
+    }
 
-        findViewById<TextView>(R.id.tvRemainingValue)?.text = "${sharedPref.getString("cal", "0")}\nRemaining"
-        findViewById<TextView>(R.id.tvProteinValue)?.text = "${sharedPref.getString("pro", "0")}g\nRemaining"
-        findViewById<TextView>(R.id.tvCarbsValue)?.text = "${sharedPref.getString("carb", "0")}g\nRemaining"
-        findViewById<TextView>(R.id.tvFatsValue)?.text = "${sharedPref.getString("fat", "0")}g\nRemaining"
-        findViewById<TextView>(R.id.tvSodiumValue)?.text = "${sharedPref.getString("sod", "0")}mg\nRemaining"
-        findViewById<TextView>(R.id.tvSugarValue)?.text = "${sharedPref.getString("sug", "0")}g\nRemaining"
+    private fun loadDiaryData() {
+        val sharedPref = getSharedPreferences("DiaryPrefs", Context.MODE_PRIVATE)
+        
+        // GET DATA - Added null checks and default values
+        val calStr = sharedPref.getString("cal", "0")?.replace(",", "")?.ifEmpty { "0" } ?: "0"
+        val proStr = sharedPref.getString("pro", "0")?.ifEmpty { "0" } ?: "0"
+        val carbStr = sharedPref.getString("carb", "0")?.ifEmpty { "0" } ?: "0"
+        val fatStr = sharedPref.getString("fat", "0")?.ifEmpty { "0" } ?: "0"
+        val sodStr = sharedPref.getString("sod", "0")?.ifEmpty { "0" } ?: "0"
+        val sugStr = sharedPref.getString("sug", "0")?.ifEmpty { "0" } ?: "0"
+
+        // UPDATE TEXT VIEWS - Using safe calls to prevent crash if layout IDs don't match
+        findViewById<TextView>(R.id.tvRemainingValueRaw)?.text = calStr
+        findViewById<TextView>(R.id.tvProteinValue)?.text = "${proStr}g"
+        findViewById<TextView>(R.id.tvCarbsValue)?.text = "${carbStr}g"
+        findViewById<TextView>(R.id.tvFatsValue)?.text = "${fatStr}g"
+        findViewById<TextView>(R.id.tvSodiumValue)?.text = "${sodStr}mg"
+        findViewById<TextView>(R.id.tvSugarValue)?.text = "${sugStr}g"
+
+        // UPDATE PROGRESS BAR
+        val calValue = calStr.toIntOrNull() ?: 0
+        val pb = findViewById<ProgressBar>(R.id.pbCalories)
+        val progress = if (calValue > 0) ((calValue / 2500f) * 100).toInt() else 0
+        pb?.progress = progress.coerceIn(0, 100)
     }
 
     private fun setupBottomNavigation() {

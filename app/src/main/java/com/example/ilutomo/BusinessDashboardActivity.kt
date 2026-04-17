@@ -2,6 +2,7 @@ package com.example.ilutomo
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -61,19 +62,20 @@ class BusinessDashboardActivity : AppCompatActivity() {
 
     private fun fetchBusinessInfoAndLoadData() {
         val uid = auth.currentUser?.uid ?: return
+        
+        // FIX: Load stats immediately regardless of businessName status
+        loadInventoryStats()
+        loadActiveOrders()
+
         firestore.collection("users").document(uid).get()
             .addOnSuccessListener { document ->
                 businessName = document.getString("businessName")?.trim()
-                if (!businessName.isNullOrEmpty()) {
-                    loadInventoryStats()
-                    loadActiveOrders()
-                } else {
-                    Toast.makeText(this, "Set Business Name in Profile first", Toast.LENGTH_SHORT).show()
-                    binding.tvTotalItems.text = "0"
+                if (businessName.isNullOrEmpty()) {
+                    Toast.makeText(this, "Set Business Name in Profile to enable all features", Toast.LENGTH_SHORT).show()
                 }
             }
             .addOnFailureListener {
-                Toast.makeText(this, "Failed to load business info", Toast.LENGTH_SHORT).show()
+                Log.e("Dashboard", "Failed to load business info")
             }
     }
 
@@ -99,7 +101,9 @@ class BusinessDashboardActivity : AppCompatActivity() {
                     binding.tvTotalItems.text = totalCount.toString()
                     binding.tvLowStock.text = allLowStock.size.toString()
                     binding.tvLowStockAlertTitle.text = "Low Stock Alerts (${allLowStock.size})"
-                    binding.cvLowStock.visibility = View.VISIBLE
+                    
+                    // Show/Hide low stock card based on count
+                    binding.cvLowStock.visibility = if (allLowStock.isEmpty()) View.GONE else View.VISIBLE
                     
                     lowStockItems.clear()
                     allLowStock.sortBy { it.stock }
@@ -110,7 +114,7 @@ class BusinessDashboardActivity : AppCompatActivity() {
                     binding.rlLowStockListHeader.visibility = if (allLowStock.isEmpty()) View.GONE else View.VISIBLE
                 }
                 override fun onCancelled(error: DatabaseError) {
-                    Toast.makeText(this@BusinessDashboardActivity, "Inventory Error: ${error.message}", Toast.LENGTH_SHORT).show()
+                    Log.e("Dashboard", "Inventory Error: ${error.message}")
                 }
             })
     }
@@ -133,7 +137,7 @@ class BusinessDashboardActivity : AppCompatActivity() {
                 binding.tvNoPendingOrders.visibility = if (activeOrders.isEmpty()) View.VISIBLE else View.GONE
             }
             override fun onCancelled(error: DatabaseError) {
-                Toast.makeText(this@BusinessDashboardActivity, "Orders Error: ${error.message}", Toast.LENGTH_SHORT).show()
+                Log.e("Dashboard", "Orders Error: ${error.message}")
             }
         })
     }
@@ -205,7 +209,7 @@ class BusinessDashboardActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val item = items[position]
-            holder.tvItemName.text = item.name
+            holder.tvItemName.text = item.getDisplayName()
             holder.tvStockCount.text = "${item.stock} left"
             holder.tvItemDetails.text = "${item.size} • ₱${String.format(Locale.getDefault(), "%.2f", item.price)}"
             holder.itemView.setOnClickListener { onItemClick() }

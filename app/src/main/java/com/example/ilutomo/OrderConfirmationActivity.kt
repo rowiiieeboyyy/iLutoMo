@@ -95,7 +95,6 @@ class OrderConfirmationActivity : AppCompatActivity() {
             setBackgroundColor(Color.parseColor("#F5F5F5"))
         })
 
-        // FIXED: Now displays name AND quantity (e.g., "Egg x2")
         inner.addView(TextView(this).apply {
             text = "${item.name} x${item.count}"
             textSize = 14f
@@ -119,7 +118,6 @@ class OrderConfirmationActivity : AppCompatActivity() {
         val orderRef = database.child("BusinessOrders").child(storeUid).push()
         val orderId = orderRef.key ?: return
 
-        // The totalAmount sumOf already uses it.price, which was scaled in PantryActivity
         val orderData = Order(
             id = orderId,
             userId = uid,
@@ -138,6 +136,9 @@ class OrderConfirmationActivity : AppCompatActivity() {
         updates["Users/$uid/MyOrders/$orderId"] = orderData
 
         database.updateChildren(updates).addOnSuccessListener {
+            // Deduct stock before clearing pantry
+            deductInventoryStock(storeUid, selectedItems)
+            
             val pantryRef = database.child("Users").child(uid).child("Pantry")
             selectedItems.forEach { item -> pantryRef.child(item.id).removeValue() }
 
@@ -149,6 +150,37 @@ class OrderConfirmationActivity : AppCompatActivity() {
         }.addOnFailureListener {
             btnPlaceOrder.isEnabled = true
             Toast.makeText(this, "Failed to place order.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun deductInventoryStock(businessUid: String, items: List<PantryIngredient>) {
+        val inventoryRef = database.child("Businesses").child(businessUid).child("inventory")
+        
+        items.forEach { orderedItem ->
+            // Use the brandName/name which is the key in the inventory database
+            val itemKey = orderedItem.name 
+            
+            inventoryRef.child(itemKey).runTransaction(object : Transaction.Handler {
+                override fun doTransaction(mutableData: MutableData): Transaction.Result {
+                    val inventoryItem = mutableData.getValue(InventoryItem::class.java)
+                        ?: return Transaction.success(mutableData)
+                    
+                    val currentStock = inventoryItem.stock
+                    val orderedCount = orderedItem.count
+                    
+                    // Deduct the stock
+                    inventoryItem.stock = (currentStock - orderedCount).coerceAtLeast(0)
+                    
+                    mutableData.value = inventoryItem
+                    return Transaction.success(mutableData)
+                }
+
+                override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {
+                    if (error != null) {
+                        android.util.Log.e("STOCK_UPDATE", "Failed to deduct stock for ${orderedItem.name}: ${error.message}")
+                    }
+                }
+            })
         }
     }
 
