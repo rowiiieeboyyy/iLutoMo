@@ -17,6 +17,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
+import java.util.Locale
 
 class RecipesActivity : AppCompatActivity() {
 
@@ -93,6 +94,96 @@ class RecipesActivity : AppCompatActivity() {
         btnAddToPantry.setOnClickListener { addToPantry() }
     }
 
+    // --- RANKING LOGIC START ---
+
+    private fun calculateMatchScore(recipe: Recipe, userProfile: UserProfile): Double {
+        var score = 0.0
+
+        // 1. Taste Matching (+10 per match)
+        userProfile.preferredTastes.forEach { taste ->
+            if (recipe.tasteProfile[taste.lowercase()] == true) {
+                score += 10.0
+            }
+        }
+
+        // 2. UPDATED: totalTime Matching (+15 if short prep preferred and recipe is fast)
+        // Changed from prepTime to totalTime
+        if (userProfile.prefersShortPrep && recipe.totalTime <= 30 && recipe.totalTime > 0) {
+            score += 15.0
+        }
+
+        // 3. Allergen Safety (Severe penalty if recipe contains user's allergen)
+        userProfile.allergens.forEach { allergen ->
+            if (recipe.allergens?.contains(allergen) == true) {
+                score -= 100.0
+            }
+        }
+
+        return score
+    }
+
+    private fun showAllRecipesDiscovery(btnChoose: Button) {
+        val uid = auth.currentUser?.uid ?: return
+
+        database.child("Users").child(uid).child("Preferences").get().addOnSuccessListener { prefSnap ->
+            val userProfile = UserProfile()
+            if (prefSnap.exists()) {
+                userProfile.preferredTastes = prefSnap.child("preferred_tastes").children.map { it.value.toString() }
+                userProfile.prefersShortPrep = prefSnap.child("prefers_short_prep").value as? Boolean ?: false
+
+                val algSnap = prefSnap.child("allergens")
+                val activeAllergens = mutableListOf<String>()
+                if (algSnap.child("Soy").value == true) activeAllergens.add("Soy")
+                if (algSnap.child("Gluten").value == true) activeAllergens.add("Gluten")
+                if (algSnap.child("Dairy").value == true) activeAllergens.add("Dairy")
+                userProfile.allergens = activeAllergens
+            }
+
+            database.child("Users").child(uid).child("AddedRecipes").get().addOnSuccessListener { recipeSnap ->
+                val rankedRecipes = mutableListOf<Recipe>()
+                for (snap in recipeSnap.children) {
+                    val recipe = snap.getValue(Recipe::class.java) ?: continue
+                    recipe.id = snap.key ?: ""
+
+                    // Manually ensure totalTime is read if not mapped correctly by getValue
+                    if (recipe.totalTime == 0) {
+                        recipe.totalTime = snap.child("totalTime").value?.toString()?.toIntOrNull() ?: 0
+                    }
+
+                    recipe.matchScore = calculateMatchScore(recipe, userProfile)
+                    rankedRecipes.add(recipe)
+                }
+
+                if (rankedRecipes.isEmpty()) {
+                    Toast.makeText(this, "No recipes in your list!", Toast.LENGTH_LONG).show()
+                    return@addOnSuccessListener
+                }
+
+                rankedRecipes.sortByDescending { it.matchScore }
+
+                val titlesWithScores = rankedRecipes.map {
+                    if (it.matchScore > 0) "${it.title} (Match: ${it.matchScore.toInt()}pts)"
+                    else it.title
+                }.toTypedArray()
+
+                AlertDialog.Builder(this)
+                    .setTitle("Recommended for You")
+                    .setItems(titlesWithScores) { _, which ->
+                        val selected = rankedRecipes[which]
+                        currentRecipe = selected
+                        btnChoose.text = selected.title
+                        tvServings.text = selected.servings.toString()
+                        loadRecipeDataIntoUI(selected)
+                    }
+                    .setNeutralButton("Delete") { _, _ -> showDeleteRecipeDialog(rankedRecipes, btnChoose) }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
+    }
+
+    // --- RANKING LOGIC END ---
+
     private fun loadIngredientLibrary() {
         database.child("ingredient_library").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
@@ -106,39 +197,6 @@ class RecipesActivity : AppCompatActivity() {
                 Log.e("RecipesActivity", "Error loading library: ${error.message}")
             }
         })
-    }
-
-    private fun showAllRecipesDiscovery(btnChoose: Button) {
-        val uid = auth.currentUser?.uid ?: return
-        database.child("Users").child(uid).child("AddedRecipes").get().addOnSuccessListener { recipeSnap ->
-            val addedRecipes = mutableListOf<Recipe>()
-            for (snap in recipeSnap.children) {
-                val recipe = snap.getValue(Recipe::class.java) ?: continue
-                recipe.id = snap.key ?: ""
-                addedRecipes.add(recipe)
-            }
-
-            if (addedRecipes.isEmpty()) {
-                Toast.makeText(this, "No recipes in your list!", Toast.LENGTH_LONG).show()
-                return@addOnSuccessListener
-            }
-
-            addedRecipes.sortBy { it.title }
-            val titles = addedRecipes.map { it.title }.toTypedArray()
-
-            AlertDialog.Builder(this)
-                .setTitle("Select Recipe")
-                .setItems(titles) { _, which ->
-                    val selected = addedRecipes[which]
-                    currentRecipe = selected
-                    btnChoose.text = selected.title
-                    tvServings.text = selected.servings.toString()
-                    loadRecipeDataIntoUI(selected)
-                }
-                .setNeutralButton("Delete") { _, _ -> showDeleteRecipeDialog(addedRecipes, btnChoose) }
-                .setNegativeButton("Cancel", null)
-                .show()
-        }
     }
 
     private fun showDeleteRecipeDialog(recipes: List<Recipe>, btnChoose: Button) {
@@ -176,7 +234,6 @@ class RecipesActivity : AppCompatActivity() {
 
     private fun updateUI() {
         val multiplier = currentRecipe?.servings ?: 1
-        // LINE 183 FIX: Passing currentIngredients, then multiplier, then the trailing lambda
         rvAvailable.adapter = IngredientCheckAdapter(currentIngredients, multiplier) {
             renderNeededList()
         }
