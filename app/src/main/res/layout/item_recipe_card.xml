@@ -21,10 +21,25 @@
             android:src="@android:drawable/ic_menu_gallery" />
 
         <TextView
+            android:id="@+id/tvMatchScore"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/dialog_rounded_bg"
+            android:backgroundTint="#E8F5E9"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="2dp"
+            android:text="100% Match"
+            android:textColor="#2E7D32"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <TextView
             android:id="@+id/tvRecipeTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="4dp"
             android:text="Recipe Title"
             android:textSize="16sp"
             android:textStyle="bold"
@@ -46,6 +61,25 @@
             android:text="P: 0g | S: 0g | C: 0g"
             android:textSize="11sp"
             android:textColor="#555555" />
+
+        <TextView
+            android:id="@+id/tvRecipePrepTime"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="🕒 0 mins"
+            android:textSize="11sp"
+            android:textColor="#666666" />
+
+        <TextView
+            android:id="@+id/tvRecipeTags"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="🏷️ No tags"
+            android:textSize="11sp"
+            android:textStyle="italic"
+            android:textColor="#673AB7" />
 
         <TextView
             android:id="@+id/tvRecipePrice"

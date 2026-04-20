@@ -19,6 +19,10 @@ data class Recipe(
     var steps: List<String>? = mutableListOf(),
     var macros: Map<String, String>? = mutableMapOf(),
 
+    // NEW: Fields for Taste Ranking and Prep Time
+    var totalTime: Int = 0,
+    var tasteProfile: Map<String, Boolean> = mutableMapOf(),
+
     // Excluded from Firebase: Local portion control
     @get:Exclude
     var servings: Int = 1,
@@ -27,7 +31,7 @@ data class Recipe(
     @get:Exclude
     var calculatedPrice: Double = 0.0,
 
-    // FIX: Added to store individual costs for the "Detailed Nutrition" breakdown
+    // For the "Detailed Nutrition" breakdown
     @get:Exclude
     var ingredientPrices: MutableMap<String, Double> = mutableMapOf(),
 
@@ -38,7 +42,33 @@ data class Recipe(
         "Sugar" to 0,
         "Calories" to 0,
         "Sodium" to 0
-    )
+    ),
+
+    // NEW: Excluded field to store the match score during ranking
+    @get:Exclude
+    var matchScore: Double = 0.0
+) : Serializable
+
+/**
+ * Model for User Preferences (Saved from activity_profile.xml)
+ */
+@IgnoreExtraProperties
+data class UserProfile(
+    var userId: String = "",
+    var dietaryTypes: List<String> = emptyList(),
+    var allergens: List<String> = emptyList(),
+    var otherAllergen: String = "",
+
+    // Preferences for Ranking
+    var preferredTastes: List<String> = emptyList(), // e.g., ["Spicy", "Savory"]
+    var prefersShortPrep: Boolean = false, // true if user selects < 30 mins
+
+    // Nutrition & Budget
+    var budgetRange: List<Float> = listOf(0f, 1000f),
+    var proteinRange: List<Float> = listOf(0f, 100f),
+    var maxCarbs: Int = 100,
+    var maxSugar: Int = 100,
+    var maxCalories: Int = 2000
 ) : Serializable
 
 /**
@@ -51,12 +81,12 @@ data class InventoryItem(
     var ingredientTag: String = "",
     var itemGrade: String = "Budget",
     var name: String = "",
-    var itemName: String = "", // Legacy field
+    var itemName: String = "",
     var stock: Int = 0,
     var size: String = "",
     var price: Double = 0.0,
     var img: String = "",
-    var imageUrl: String = "", // Legacy field
+    var imageUrl: String = "",
     var timestamp: Long = 0
 ) : Serializable {
     @Exclude

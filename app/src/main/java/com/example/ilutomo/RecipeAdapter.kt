@@ -8,6 +8,7 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import java.util.Locale
 
 class RecipeAdapter(
     private var recipes: List<Recipe>,
@@ -19,12 +20,19 @@ class RecipeAdapter(
         val title: TextView = view.findViewById(R.id.tvRecipeTitle)
         val category: TextView = view.findViewById(R.id.tvRecipeCategory)
         val macros: TextView = view.findViewById(R.id.tvRecipeMacros)
+
+        // FIX: The ID in your XML is tvRecipePrepTime.
+        // We map it to a variable named 'totalTime' to match your new logic.
+        val totalTime: TextView = view.findViewById(R.id.tvRecipePrepTime)
+        val tags: TextView = view.findViewById(R.id.tvRecipeTags)
+
+        // Recommendation Match Score
+        val tvMatchScore: TextView? = view.findViewById(R.id.tvMatchScore)
+
         val btnAdd: ImageView = view.findViewById(R.id.btnAddRecipe)
         val tvServings: TextView = view.findViewById(R.id.tvHomeServings)
         val btnPlus: ImageButton = view.findViewById(R.id.btnHomePlus)
         val btnMinus: ImageButton = view.findViewById(R.id.btnHomeMinus)
-
-        // Maps to the price display on the home card
         val tvPrice: TextView? = view.findViewById(R.id.tvRecipePrice)
     }
 
@@ -41,43 +49,58 @@ class RecipeAdapter(
         holder.category.text = recipe.category
         holder.tvServings.text = multiplier.toString()
 
-        // Display Total Price based on servings
+        // --- TOTAL TIME BINDING ---
+        // Using the updated model field 'totalTime'
+        holder.totalTime.text = if (recipe.totalTime > 0) "🕒 ${recipe.totalTime} mins" else "🕒 N/A"
+
+        // --- TASTE TAGS BINDING ---
+        val activeTags = recipe.tasteProfile.filter { it.value }.keys.map {
+            it.replaceFirstChar { char -> if (char.isLowerCase()) char.titlecase(Locale.getDefault()) else char.toString() }
+        }
+        holder.tags.text = if (activeTags.isNotEmpty()) "🏷️ ${activeTags.joinToString(", ")}" else "🏷️ No tags"
+
+        // --- MATCH SCORE VISIBILITY ---
+        holder.tvMatchScore?.let {
+            if (recipe.matchScore > 0) {
+                it.visibility = View.VISIBLE
+                it.text = "${recipe.matchScore.toInt()}% Match"
+            } else {
+                it.visibility = View.GONE
+            }
+        }
+
+        // Display Total Price
         holder.tvPrice?.let {
             val total = recipe.calculatedPrice * multiplier
             it.text = "₱${String.format("%.2f", total)}"
         }
 
-        // Use the safe keys from our updated Model
+        // Macros calculation
         val p = (recipe.calculatedMacros["Protein"] ?: 0) * multiplier
         val s = (recipe.calculatedMacros["Sugar"] ?: 0) * multiplier
         val c = (recipe.calculatedMacros["Carbs"] ?: 0) * multiplier
         val cal = (recipe.calculatedMacros["Calories"] ?: 0) * multiplier
-
         holder.macros.text = "P: ${p}g | S: ${s}g | C: ${c}g | ${cal} kcal"
 
-        // Image loading logic
+        // Image loading
         val context = holder.itemView.context
         val resId = context.resources.getIdentifier(recipe.imageResourceName, "drawable", context.packageName)
         holder.img.setImageResource(if (resId != 0) resId else android.R.drawable.ic_menu_gallery)
 
-        // Listeners for portion control
+        // Listeners
         holder.btnPlus.setOnClickListener {
             recipe.servings++
             notifyItemChanged(position)
         }
-
         holder.btnMinus.setOnClickListener {
             if (recipe.servings > 1) {
                 recipe.servings--
                 notifyItemChanged(position)
             }
         }
-
         holder.btnAdd.setOnClickListener { onAddClick(recipe) }
-
         holder.itemView.setOnClickListener {
             val intent = Intent(context, RecipeDetailsActivity::class.java)
-            // Passes the recipe along with the new ingredientPrices map
             intent.putExtra("RECIPE", recipe)
             context.startActivity(intent)
         }

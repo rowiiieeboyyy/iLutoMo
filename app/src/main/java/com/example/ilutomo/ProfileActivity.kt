@@ -72,7 +72,6 @@ class ProfileActivity : AppCompatActivity() {
             updateSummaryUI()
         }
 
-        // Update Text when Slider moves
         slider.addOnChangeListener { s, _, fromUser ->
             if (fromUser) {
                 editText.setText(s.values[1].toInt().toString())
@@ -80,7 +79,6 @@ class ProfileActivity : AppCompatActivity() {
             }
         }
 
-        // Move Slider when Text is typed
         editText.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {
                 val input = s.toString().toFloatOrNull() ?: 0f
@@ -104,7 +102,6 @@ class ProfileActivity : AppCompatActivity() {
             updateSummaryUI()
         }
 
-        // Update Text when Slider moves
         slider.addOnChangeListener { s, _, fromUser ->
             if (fromUser) {
                 editText.setText(s.value.toInt().toString())
@@ -112,7 +109,6 @@ class ProfileActivity : AppCompatActivity() {
             }
         }
 
-        // Move Slider when Text is typed
         editText.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {
                 val input = s.toString().toFloatOrNull() ?: 0f
@@ -148,6 +144,17 @@ class ProfileActivity : AppCompatActivity() {
 
     private fun savePreferences() {
         val uid = auth.currentUser?.uid ?: return
+
+        // Capture Taste Preferences
+        val preferredTastes = mutableListOf<String>()
+        if (binding.cbSweet.isChecked) preferredTastes.add("sweet")
+        if (binding.cbSavory.isChecked) preferredTastes.add("savory")
+        if (binding.cbSpicy.isChecked) preferredTastes.add("spicy")
+        if (binding.cbSour.isChecked) preferredTastes.add("sour")
+
+        // Capture Prep Time Preference
+        val prefersShortPrep = binding.rbShortPrep.isChecked
+
         val prefs = mutableMapOf<String, Any>(
             "dietary_type" to when {
                 binding.cbVegetarian.isChecked -> "Vegetarian"
@@ -161,10 +168,11 @@ class ProfileActivity : AppCompatActivity() {
                 "Dairy" to binding.cbDairy.isChecked,
                 "Others" to binding.cbOthers.isChecked,
                 "Others_Value" to binding.etOtherAllergen.text.toString().trim()
-            )
+            ),
+            "preferred_tastes" to preferredTastes,
+            "prefers_short_prep" to prefersShortPrep
         )
 
-        // READ FROM EDITTEXT PREFERENTIALLY TO CAPTURE MANUAL INPUTS
         prefs["budget_min"] = if (binding.checkBudget.isChecked) binding.rangeBudget.values[0].toInt() else 0
         prefs["budget_max"] = if (binding.checkBudget.isChecked) (binding.etBudgetInput.text.toString().toIntOrNull() ?: binding.rangeBudget.values[1].toInt()) else 10000
 
@@ -186,12 +194,25 @@ class ProfileActivity : AppCompatActivity() {
         val uid = auth.currentUser?.uid ?: return
         database.child("Users").child(uid).child("Preferences").get().addOnSuccessListener { snapshot ->
             if (snapshot.exists()) {
+                // Restore Dietary Type
                 val diet = snapshot.child("dietary_type").value.toString()
                 binding.cbKeto.isChecked = diet == "Keto"
                 binding.cbVegetarian.isChecked = diet == "Vegetarian"
                 binding.cbPescatarian.isChecked = diet == "Pescatarian"
                 binding.cbStandard.isChecked = (diet == "Standard" || diet == "null")
 
+                // Restore Taste Preferences
+                val tastes = snapshot.child("preferred_tastes").children.map { it.value.toString() }
+                binding.cbSweet.isChecked = tastes.contains("sweet")
+                binding.cbSavory.isChecked = tastes.contains("savory")
+                binding.cbSpicy.isChecked = tastes.contains("spicy")
+                binding.cbSour.isChecked = tastes.contains("sour")
+
+                // Restore Prep Time
+                val shortPrep = snapshot.child("prefers_short_prep").value as? Boolean ?: false
+                if (shortPrep) binding.rbShortPrep.isChecked = true else binding.rbLongPrep.isChecked = true
+
+                // Restore Sliders
                 fun restoreRange(slider: RangeSlider, check: CheckBox, editText: EditText, key: String, defaultMax: Float) {
                     val min = snapshot.child("${key}_min").value?.toString()?.toFloatOrNull() ?: 0f
                     val max = snapshot.child("${key}_max").value?.toString()?.toFloatOrNull() ?: defaultMax
@@ -216,6 +237,7 @@ class ProfileActivity : AppCompatActivity() {
                 restoreSingle(binding.rangeSugar, binding.checkSugar, binding.etSugarInput, "sugar", 1000f)
                 restoreSingle(binding.rangeCalories, binding.checkCalories, binding.etCaloriesInput, "calories", 10000f)
 
+                // Restore Allergens
                 val alg = snapshot.child("allergens")
                 binding.cbSoy.isChecked = alg.child("Soy").value == true
                 binding.cbGluten.isChecked = alg.child("Gluten").value == true

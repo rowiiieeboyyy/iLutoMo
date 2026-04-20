@@ -12,6 +12,7 @@ import com.example.ilutomo.databinding.ActivityRecipeDetailsBinding
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import com.google.firebase.firestore.FirebaseFirestore
+import java.util.*
 import kotlin.math.*
 
 class RecipeDetailsActivity : AppCompatActivity() {
@@ -26,7 +27,6 @@ class RecipeDetailsActivity : AppCompatActivity() {
     private var userLat: Double = 0.0
     private var userLng: Double = 0.0
 
-    // Local copy of the recipe to handle serving changes
     private var currentRecipe: Recipe? = null
 
     data class BusinessLocation(val address: String, val lat: Double, val lng: Double, var distance: Double = 0.0)
@@ -36,7 +36,7 @@ class RecipeDetailsActivity : AppCompatActivity() {
         binding = ActivityRecipeDetailsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Retrieving the Serialized recipe object passed from RecipeAdapter
+        // Using the updated serializable retrieval
         currentRecipe = intent.getSerializableExtra("RECIPE") as? Recipe
 
         val recipe = currentRecipe
@@ -49,7 +49,6 @@ class RecipeDetailsActivity : AppCompatActivity() {
 
         binding.detailToolbar.setNavigationOnClickListener { finish() }
 
-        // --- PORTION CONTROL LISTENERS ---
         binding.btnDetailPlus.setOnClickListener {
             recipe.servings++
             updateServingUI()
@@ -63,10 +62,8 @@ class RecipeDetailsActivity : AppCompatActivity() {
         }
 
         binding.fabAddToPantry.setOnClickListener { addToPantry(recipe) }
-        
         binding.btnSaveRecipe.setOnClickListener { saveRecipeToMyList(recipe) }
 
-        // Initial setup and data loading
         fetchUserLocationAndData(recipe)
     }
 
@@ -85,7 +82,6 @@ class RecipeDetailsActivity : AppCompatActivity() {
                 loadBusinessData(recipe)
             }
             .addOnFailureListener {
-                // Load data even if location fails to avoid empty UI
                 loadBusinessData(recipe)
             }
     }
@@ -131,20 +127,26 @@ class RecipeDetailsActivity : AppCompatActivity() {
     private fun setupUI(recipe: Recipe) {
         val multiplier = recipe.servings
 
-        // Basic Info
         binding.tvDetailTitle.text = recipe.title
         binding.tvDetailDescription.text = recipe.description
         binding.tvDetailServings.text = multiplier.toString()
 
-        // --- DYNAMIC PRICE DISPLAY ---
+        // --- UPDATED: DISPLAY TOTAL TIME ---
+        // Note: Check your activity_recipe_details.xml. If the ID is tvDetailPrepTime,
+        // use binding.tvDetailPrepTime.text instead.
+        binding.tvDetailPrepTime.text = if (recipe.totalTime > 0) "🕒 ${recipe.totalTime} mins" else "🕒 N/A"
+
+        val activeTags = recipe.tasteProfile.filter { it.value }.keys.map {
+            it.replaceFirstChar { char -> if (char.isLowerCase()) char.titlecase(Locale.getDefault()) else char.toString() }
+        }
+        binding.tvDetailTags.text = if (activeTags.isNotEmpty()) "🏷️ ${activeTags.joinToString(", ")}" else "🏷️ No tags"
+
         val totalPrice = recipe.calculatedPrice * multiplier
         binding.tvDetailPrice.text = "₱${String.format("%.2f", totalPrice)}"
 
-        // Image loading
         val imageResId = resources.getIdentifier(recipe.imageResourceName, "drawable", packageName)
-        binding.ivRecipeDetailImage.setImageResource(if (imageResId != 0) imageResId else R.drawable.placeholder_food)
+        binding.ivRecipeDetailImage.setImageResource(if (imageResId != 0) imageResId else android.R.drawable.ic_menu_gallery)
 
-        // --- SCALE NUTRITION FACTS ---
         val macros = recipe.calculatedMacros
         binding.tvDetailCalories.text = ((macros["Calories"] ?: 0) * multiplier).toString()
         binding.tvDetailProtein.text = "${(macros["Protein"] ?: 0) * multiplier}g"
@@ -152,12 +154,9 @@ class RecipeDetailsActivity : AppCompatActivity() {
         binding.tvDetailSugar.text = "${(macros["Sugar"] ?: 0) * multiplier}g"
         binding.tvDetailSodium.text = "${(macros["Sodium"] ?: 0) * multiplier}mg"
 
-        // --- SCALE INGREDIENTS & INDIVIDUAL PRICES ---
         binding.llIngredientsList.removeAllViews()
         recipe.ingredients?.forEach { (name, rawAmount) ->
             val scaledAmount = scaleAmount(rawAmount.toString(), multiplier)
-
-            // Calculate individual price for this ingredient row
             val ingredientBasePrice = recipe.ingredientPrices?.get(name) ?: 0.0
             val ingredientTotalPrice = ingredientBasePrice * multiplier
             val priceText = if (ingredientTotalPrice > 0) " - ₱${String.format("%.2f", ingredientTotalPrice)}" else ""
@@ -175,7 +174,6 @@ class RecipeDetailsActivity : AppCompatActivity() {
             binding.llIngredientsList.addView(tvName)
         }
 
-        // --- POPULATE STEPS ---
         binding.tvStepsList.text = recipe.steps?.mapIndexed { i, s ->
             "${i + 1}. $s"
         }?.joinToString("\n\n") ?: "No cooking steps provided."
@@ -209,8 +207,6 @@ class RecipeDetailsActivity : AppCompatActivity() {
         ingredients.forEach { (name, amount) ->
             val key = pantryRef.push().key ?: return@forEach
             val finalAmount = scaleAmount(amount.toString(), multiplier)
-
-            // Get the actual cost for this ingredient at this serving size
             val ingredientBasePrice = recipe.ingredientPrices?.get(name) ?: 0.0
             val finalPrice = ingredientBasePrice * multiplier
 
@@ -229,24 +225,23 @@ class RecipeDetailsActivity : AppCompatActivity() {
 
     private fun saveRecipeToMyList(recipe: Recipe) {
         val uid = auth.currentUser?.uid ?: return
-        val savedRecipesRef = database.child("Users").child(uid).child("AddedRecipes")
-        
-        // Use title as key or push for unique entry. Push is safer for duplicates.
-        val key = savedRecipesRef.push().key ?: return
-        
-        // We create a clean copy for saving (resetting servants to 1 for standard save)
+        val savedRecipesRef = database.child("Users").child(uid).child("AddedRecipes").child(recipe.id)
+
+        // --- UPDATED: SAVING TOTALTIME ---
         val saveMap = mapOf(
-            "id" to key,
+            "id" to recipe.id,
             "title" to recipe.title,
             "description" to recipe.description,
             "category" to recipe.category,
             "imageResourceName" to recipe.imageResourceName,
             "ingredients" to recipe.ingredients,
             "steps" to recipe.steps,
+            "totalTime" to recipe.totalTime, // Matches new model
+            "tasteProfile" to recipe.tasteProfile,
             "servings" to 1
         )
 
-        savedRecipesRef.child(key).setValue(saveMap)
+        savedRecipesRef.setValue(saveMap)
             .addOnSuccessListener {
                 Toast.makeText(this, "Saved to My Recipes!", Toast.LENGTH_SHORT).show()
             }
