@@ -36,7 +36,6 @@ class RecipeDetailsActivity : AppCompatActivity() {
         binding = ActivityRecipeDetailsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Using the updated serializable retrieval
         currentRecipe = intent.getSerializableExtra("RECIPE") as? Recipe
 
         val recipe = currentRecipe
@@ -46,6 +45,9 @@ class RecipeDetailsActivity : AppCompatActivity() {
             finish()
             return
         }
+
+        // --- IMPORTANT LOG: Viewing Recipe ---
+        logActivity("View Recipe", "User is viewing details for: ${recipe.title}")
 
         binding.detailToolbar.setNavigationOnClickListener { finish() }
 
@@ -65,6 +67,19 @@ class RecipeDetailsActivity : AppCompatActivity() {
         binding.btnSaveRecipe.setOnClickListener { saveRecipeToMyList(recipe) }
 
         fetchUserLocationAndData(recipe)
+    }
+
+    // HELPER FUNCTION: Logs actions to Firestore for the PHP Admin Dashboard
+    private fun logActivity(action: String, details: String) {
+        val userEmail = auth.currentUser?.email ?: "Guest User"
+        val log = hashMapOf(
+            "userEmail" to userEmail,
+            "action" to action,
+            "details" to details,
+            "timestamp" to com.google.firebase.Timestamp.now()
+        )
+        firestore.collection("UserActivities").add(log)
+            .addOnFailureListener { e -> Log.e("LOG_ERROR", "Failed to log: ${e.message}") }
     }
 
     private fun updateServingUI() {
@@ -131,9 +146,6 @@ class RecipeDetailsActivity : AppCompatActivity() {
         binding.tvDetailDescription.text = recipe.description
         binding.tvDetailServings.text = multiplier.toString()
 
-        // --- UPDATED: DISPLAY TOTAL TIME ---
-        // Note: Check your activity_recipe_details.xml. If the ID is tvDetailPrepTime,
-        // use binding.tvDetailPrepTime.text instead.
         binding.tvDetailPrepTime.text = if (recipe.totalTime > 0) "🕒 ${recipe.totalTime} mins" else "🕒 N/A"
 
         val activeTags = recipe.tasteProfile.filter { it.value }.keys.map {
@@ -204,6 +216,9 @@ class RecipeDetailsActivity : AppCompatActivity() {
             return
         }
 
+        // --- IMPORTANT LOG: Adding to Pantry ---
+        logActivity("Pantry Update", "Added ingredients for ${recipe.title} ($multiplier servings) to pantry.")
+
         ingredients.forEach { (name, amount) ->
             val key = pantryRef.push().key ?: return@forEach
             val finalAmount = scaleAmount(amount.toString(), multiplier)
@@ -227,7 +242,9 @@ class RecipeDetailsActivity : AppCompatActivity() {
         val uid = auth.currentUser?.uid ?: return
         val savedRecipesRef = database.child("Users").child(uid).child("AddedRecipes").child(recipe.id)
 
-        // --- UPDATED: SAVING TOTALTIME ---
+        // --- IMPORTANT LOG: Saving Recipe ---
+        logActivity("Saved Recipe", "User added ${recipe.title} to their saved list.")
+
         val saveMap = mapOf(
             "id" to recipe.id,
             "title" to recipe.title,
@@ -236,7 +253,7 @@ class RecipeDetailsActivity : AppCompatActivity() {
             "imageResourceName" to recipe.imageResourceName,
             "ingredients" to recipe.ingredients,
             "steps" to recipe.steps,
-            "totalTime" to recipe.totalTime, // Matches new model
+            "totalTime" to recipe.totalTime,
             "tasteProfile" to recipe.tasteProfile,
             "servings" to 1
         )
