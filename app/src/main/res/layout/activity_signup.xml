@@ -31,8 +31,8 @@
                 android:id="@+id/profileImage"
                 android:layout_width="70dp"
                 android:layout_height="70dp"
-                android:src="@drawable/my_profile"
-                android:scaleType="centerCrop"/>
+                android:src="@drawable/ilutomo_logo"
+                android:scaleType="centerInside"/>
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -49,74 +49,81 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Join us today to get started!"
+                    android:text="Verified registration via Google"
                     android:textColor="#888888" />
             </LinearLayout>
         </LinearLayout>
 
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Email" android:layout_marginTop="15dp" android:textStyle="bold"/>
-        <EditText
-            android:id="@+id/etSignUpEmail"
-            android:layout_width="match_parent" android:layout_height="50dp"
-            android:hint="Enter your email" android:background="@drawable/edittext_background"
-            android:paddingStart="10dp" android:layout_marginTop="5dp"
-            android:inputType="textEmailAddress"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="We'll send you a verification email." android:textColor="#888888" android:textSize="12sp"/>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Select Your Account Type"
+            android:layout_marginTop="40dp"
+            android:textStyle="bold"
+            android:textColor="#1B3022"/>
 
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Password" android:layout_marginTop="15dp" android:textStyle="bold"/>
-        <EditText
-            android:id="@+id/etSignUpPassword"
-            android:layout_width="match_parent" android:layout_height="50dp"
-            android:hint="Create a password" android:background="@drawable/edittext_background"
-            android:paddingStart="10dp" android:layout_marginTop="5dp" android:inputType="textPassword"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Must be at least 8 characters." android:textColor="#888888" android:textSize="12sp"/>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="10dp">
 
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Confirm Password" android:layout_marginTop="15dp" android:textStyle="bold"/>
-        <EditText
-            android:id="@+id/etConfirmPassword"
-            android:layout_width="match_parent" android:layout_height="50dp"
-            android:hint="Re-enter your password" android:background="@drawable/edittext_background"
-            android:paddingStart="10dp" android:layout_marginTop="5dp" android:inputType="textPassword"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Make sure it matches your password." android:textColor="#888888" android:textSize="12sp"/>
-
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Select Your Account Type" android:layout_marginTop="20dp"
-            android:textStyle="bold" android:textColor="#1B3022"/>
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="horizontal" android:layout_marginTop="10dp">
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/btnPersonal"
-                android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:text="Personal" android:background="@drawable/button_outline"
-                android:layout_marginEnd="5dp" android:textAllCaps="false"/>
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Personal"
+                android:background="@drawable/button_outline"
+                android:layout_marginEnd="5dp"
+                android:textAllCaps="false"/>
+
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/btnBusiness"
-                android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:text="Business" android:background="@drawable/button_outline"
-                android:layout_marginStart="5dp" android:textAllCaps="false"/>
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Business"
+                android:background="@drawable/button_outline"
+                android:layout_marginStart="5dp"
+                android:textAllCaps="false"/>
         </LinearLayout>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Choose the type of account you want to create." android:textColor="#888888"
-            android:textSize="12sp" android:layout_marginTop="5dp"/>
 
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="horizontal" android:layout_marginTop="30dp" android:layout_marginBottom="20dp">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Choose how you will use iLutoMo."
+            android:textColor="#888888"
+            android:textSize="12sp"
+            android:layout_marginTop="5dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="50dp"
+            android:layout_marginBottom="20dp">
+
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/btnCancel"
-                android:layout_width="0dp" android:layout_height="55dp" android:layout_weight="1"
-                android:text="Cancel" android:background="@drawable/button_outline"
-                android:layout_marginEnd="5dp" android:textAllCaps="false"/>
+                android:layout_width="0dp"
+                android:layout_height="55dp"
+                android:layout_weight="1"
+                android:text="Cancel"
+                android:background="@drawable/button_outline"
+                android:layout_marginEnd="5dp"
+                android:textAllCaps="false"/>
+
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/btnSubmitSignUp"
-                android:layout_width="0dp" android:layout_height="55dp" android:layout_weight="1"
-                android:text="Sign Up" android:textColor="#FFFFFF"
-                android:background="@drawable/button_solid" android:layout_marginStart="5dp" android:textAllCaps="false"/>
+                android:layout_width="0dp"
+                android:layout_height="55dp"
+                android:layout_weight="2"
+                android:text="Sign Up with Google"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/button_solid"
+                android:layout_marginStart="5dp"
+                android:textAllCaps="false"/>
         </LinearLayout>
     </LinearLayout>
 </ScrollView>
