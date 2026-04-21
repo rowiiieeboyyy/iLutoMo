@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "847820386707",
+    "firebase_url": "https://ilutomo-default-rtdb.firebaseio.com",
+    "project_id": "ilutomo",
+    "storage_bucket": "ilutomo.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:847820386707:android:fc5ea73cee688ef9723866",
+        "android_client_info": {
+          "package_name": "com.example.ilutomo"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "847820386707-2v9u42m26j8b63c0nugqbanv4npkkfod.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.ilutomo",
+            "certificate_hash": "1a78e6413caaa6e2c4f85a1850012be624b1fa42"
+          }
+        },
+        {
+          "client_id": "847820386707-r70dn518f7pskvkmpn611j1rhm3qd7bs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAwv8XaP8Z0RL4xnDpOeEBtRaNGF2FK2vM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "847820386707-r70dn518f7pskvkmpn611j1rhm3qd7bs.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
