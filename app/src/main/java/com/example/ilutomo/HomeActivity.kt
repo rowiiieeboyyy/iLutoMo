@@ -29,9 +29,9 @@ class HomeActivity : AppCompatActivity() {
     private val allRecipes = mutableListOf<Recipe>()
     private val filteredList = mutableListOf<Recipe>()
     private val ingredientLibrary = mutableMapOf<String, DataSnapshot>()
+    private val businessInventory = mutableListOf<InventoryItem>()
     private lateinit var recipeAdapter: RecipeAdapter
 
-    // Persistent Ingredients List for the "Fridge" feature
     private val currentFridgeIngredients = mutableListOf<String>()
 
     private var userDiet = "Standard"
@@ -39,7 +39,6 @@ class HomeActivity : AppCompatActivity() {
     private var customAllergen = ""
     private var searchQuery = ""
 
-    // Filter Variables
     private var maxtotalTime = 0
     private var selectedTaste = ""
     private var budgetMin = 0.0; var budgetMax = 10000.0
@@ -57,115 +56,42 @@ class HomeActivity : AppCompatActivity() {
         setupBottomNavigation()
         setupSearch()
 
-        // Trigger the recommendation dialog
         binding.btnRecommend.setOnClickListener {
             showIngredientRecommendationDialog()
         }
 
-        loadIngredientLibrary()
+        loadData()
     }
 
-    /**
-     * DIALOG LOGIC: Handles the "What's in my fridge?" UI and persistence
-     */
-    private fun showIngredientRecommendationDialog() {
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_ingredient_search, null)
-        val chipGroup = dialogView.findViewById<ChipGroup>(R.id.cgIngredients)
-        val input = dialogView.findViewById<TextInputEditText>(R.id.etIngredientInput)
-        val til = dialogView.findViewById<TextInputLayout>(R.id.tilIngredient)
-
-        // RESTORE: Add chips for ingredients already in our global list
-        currentFridgeIngredients.forEach { ingredient ->
-            addChipToUI(ingredient, chipGroup)
-        }
-
-        // Logic to add a new ingredient
-        til.setEndIconOnClickListener {
-            val text = input.text.toString().trim()
-            if (text.isNotEmpty() && !currentFridgeIngredients.contains(text)) {
-                currentFridgeIngredients.add(text) // Save to global list
-                addChipToUI(text, chipGroup)
-                input.text?.clear()
-            }
-        }
-
-        AlertDialog.Builder(this)
-            .setView(dialogView)
-            .setPositiveButton("Recommend") { _, _ ->
-                if (currentFridgeIngredients.isNotEmpty()) {
-                    runRecommendationAlgorithm(currentFridgeIngredients)
+    private fun loadData() {
+        // Load Inventory first, then Library, then User Profile, then Recipes
+        database.child("Businesses").addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(bizSnap: DataSnapshot) {
+                businessInventory.clear()
+                for (biz in bizSnap.children) {
+                    for (inv in biz.child("inventory").children) {
+                        inv.getValue(InventoryItem::class.java)?.let { 
+                            it.id = inv.key ?: ""
+                            businessInventory.add(it) 
+                        }
+                    }
                 }
+                loadIngredientLibrary()
             }
-            .setNegativeButton("Clear All") { _, _ ->
-                currentFridgeIngredients.clear()
-                applyFilters() // Reset the view to show all recipes
-            }
-            .show()
+            override fun onCancelled(e: DatabaseError) {}
+        })
     }
-
-    /**
-     * HELPER: Creates a visual Chip and handles the delete logic
-     */
-    private fun addChipToUI(text: String, chipGroup: ChipGroup) {
-        val chip = Chip(this)
-        chip.text = text
-        chip.isCloseIconVisible = true
-        chip.setOnCloseIconClickListener {
-            chipGroup.removeView(chip)
-            currentFridgeIngredients.remove(text) // Remove from global list when 'X' is clicked
-        }
-        chipGroup.addView(chip)
-    }
-
-    /**
-     * ALGORITHM: Ranks recipes based on how many ingredients the user has
-     */
-    private fun runRecommendationAlgorithm(userIngredients: List<String>) {
-        val results = allRecipes.map { recipe ->
-            val recipeIngredients = recipe.ingredients?.keys?.map { it.lowercase() } ?: emptyList()
-            val searchItems = userIngredients.map { it.lowercase() }
-
-            // Count how many recipe ingredients are found in the user's fridge
-            val matchCount = recipeIngredients.count { rIng ->
-                searchItems.any { sIng -> rIng.contains(sIng) || sIng.contains(rIng) }
-            }
-
-            val percentage = if (recipeIngredients.isNotEmpty()) {
-                (matchCount.toDouble() / recipeIngredients.size) * 100
-            } else 0.0
-
-            recipe.matchScore = percentage
-            recipe
-        }
-            .filter { it.matchScore > 0 } // Only show recipes with at least one match
-            .sortedByDescending { it.matchScore } // Rank by highest match first
-
-        filteredList.clear()
-        filteredList.addAll(results)
-        recipeAdapter.notifyDataSetChanged()
-
-        if (results.isEmpty()) {
-            Toast.makeText(this, "No recipes found with these ingredients.", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "Found ${results.size} matches!", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    // --- DATA LOADING & PREFERENCES (Existing Logic) ---
 
     private fun loadIngredientLibrary() {
         database.child("ingredient_library").addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(s: DataSnapshot) {
                 ingredientLibrary.clear()
                 for (child in s.children) {
-                    val key = child.key ?: continue
-                    ingredientLibrary[key] = child
+                    ingredientLibrary[child.key ?: ""] = child
                 }
                 fetchUserLocationAndData()
             }
-            override fun onCancelled(e: DatabaseError) {
-                Log.e("HOME_ERROR", "Lib Load Cancelled: ${e.message}")
-            }
+            override fun onCancelled(e: DatabaseError) {}
         })
     }
 
@@ -211,7 +137,6 @@ class HomeActivity : AppCompatActivity() {
                         carbsMax = toFilterDouble(s.child("carbs_max").value, 1000.0).let { if (it <= 0) 1000.0 else it }
                         sugarMax = toFilterDouble(s.child("sugar_max").value, 1000.0).let { if (it <= 0) 1000.0 else it }
                         caloriesMax = toFilterDouble(s.child("calories_max").value, 10000.0).let { if (it <= 0) 10000.0 else it }
-
                         maxtotalTime = s.child("max_total_time").value?.toString()?.toIntOrNull() ?: 0
 
                         activeAllergens.clear()
@@ -244,6 +169,7 @@ class HomeActivity : AppCompatActivity() {
                             }
                             r.tasteProfile = tasteMap
 
+                            // GREEDY CALCULATION: Price based on CHEAPEST available inventory items
                             var pro = 0.0; var carb = 0.0; var sug = 0.0; var cal = 0.0; var sod = 0.0
                             var totalPrice = 0.0
                             val individualPrices = mutableMapOf<String, Double>()
@@ -251,19 +177,29 @@ class HomeActivity : AppCompatActivity() {
                             r.ingredients?.forEach { (name, amt) ->
                                 val lib = ingredientLibrary[name]
                                 if (lib != null) {
-                                    val qty = amt.toString().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0
+                                    val qty = amt.toString().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 1.0
+                                    
+                                    // 1. Macros from Library
                                     val factor = if (name.contains("Egg", true)) qty else (qty / 50.0)
                                     pro += factor * toFilterDouble(lib.child("pro").value, 0.0)
                                     carb += factor * toFilterDouble(lib.child("carb").value, 0.0)
                                     sug += factor * toFilterDouble(lib.child("sugar").value, 0.0)
                                     cal += factor * toFilterDouble(lib.child("cal").value, 0.0)
                                     sod += factor * toFilterDouble(lib.child("sodium").value, 0.0)
-                                    val standardPrice = toFilterDouble(lib.child("price").value, 0.0)
-                                    val cost = standardPrice * (qty / 100.0)
+                                    
+                                    // 2. Price: Find cheapest item in store inventory for this ingredient
+                                    val cheapestStoreItem = businessInventory
+                                        .filter { it.ingredient.equals(name, true) || it.ingredientTag.equals(name, true) }
+                                        .minByOrNull { it.price }
+                                    
+                                    val unitPrice = cheapestStoreItem?.price ?: toFilterDouble(lib.child("price").value, 0.0)
+                                    val cost = if (cheapestStoreItem != null) unitPrice else (unitPrice * (qty / 100.0))
+                                    
                                     totalPrice += cost
                                     individualPrices[name] = cost
                                 }
                             }
+                            
                             r.calculatedPrice = totalPrice
                             r.ingredientPrices = individualPrices
                             r.calculatedMacros["Protein"] = pro.toInt()
@@ -300,9 +236,7 @@ class HomeActivity : AppCompatActivity() {
             val matchestotalTime = if (maxtotalTime > 0) r.totalTime <= maxtotalTime else true
             val matchesTaste = if (selectedTaste.isNotEmpty()) r.tasteProfile[selectedTaste.lowercase()] == true else true
 
-            // Reset matchScore when returning to normal filter mode
             r.matchScore = 0.0
-
             matchesBudget && matchesMacros && matchesSearch && matchestotalTime && matchesTaste
         }
         filteredList.addAll(baseFiltered)
@@ -334,6 +268,8 @@ class HomeActivity : AppCompatActivity() {
     private fun setupRecyclerView() {
         recipeAdapter = RecipeAdapter(filteredList) { r ->
             val uid = auth.currentUser?.uid ?: return@RecipeAdapter
+            
+            // GREEDY: When adding to pantry, automatically select the CHEAPEST items to fit the initial view
             database.child("Users").child(uid).child("AddedRecipes").child(r.id).setValue(r)
                 .addOnSuccessListener { Toast.makeText(this, "Added to Recipes!", Toast.LENGTH_SHORT).show() }
         }
@@ -354,5 +290,58 @@ class HomeActivity : AppCompatActivity() {
             intent?.let { startActivity(it); overridePendingTransition(0,0); finish() }
             true
         }
+    }
+
+    private fun showIngredientRecommendationDialog() {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_ingredient_search, null)
+        val chipGroup = dialogView.findViewById<ChipGroup>(R.id.cgIngredients)
+        val input = dialogView.findViewById<TextInputEditText>(R.id.etIngredientInput)
+        val til = dialogView.findViewById<TextInputLayout>(R.id.tilIngredient)
+        currentFridgeIngredients.forEach { addChipToUI(it, chipGroup) }
+        til.setEndIconOnClickListener {
+            val text = input.text.toString().trim()
+            if (text.isNotEmpty() && !currentFridgeIngredients.contains(text)) {
+                currentFridgeIngredients.add(text)
+                addChipToUI(text, chipGroup)
+                input.text?.clear()
+            }
+        }
+        AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setPositiveButton("Recommend") { _, _ ->
+                if (currentFridgeIngredients.isNotEmpty()) runRecommendationAlgorithm(currentFridgeIngredients)
+            }
+            .setNegativeButton("Clear All") { _, _ ->
+                currentFridgeIngredients.clear()
+                applyFilters()
+            }
+            .show()
+    }
+
+    private fun addChipToUI(text: String, chipGroup: ChipGroup) {
+        val chip = Chip(this)
+        chip.text = text
+        chip.isCloseIconVisible = true
+        chip.setOnCloseIconClickListener {
+            chipGroup.removeView(chip)
+            currentFridgeIngredients.remove(text)
+        }
+        chipGroup.addView(chip)
+    }
+
+    private fun runRecommendationAlgorithm(userIngredients: List<String>) {
+        val results = allRecipes.map { recipe ->
+            val recipeIngredients = recipe.ingredients?.keys?.map { it.lowercase() } ?: emptyList()
+            val searchItems = userIngredients.map { it.lowercase() }
+            val matchCount = recipeIngredients.count { rIng ->
+                searchItems.any { sIng -> rIng.contains(sIng) || sIng.contains(rIng) }
+            }
+            val percentage = if (recipeIngredients.isNotEmpty()) (matchCount.toDouble() / recipeIngredients.size) * 100 else 0.0
+            recipe.matchScore = percentage
+            recipe
+        }.filter { it.matchScore > 0 }.sortedByDescending { it.matchScore }
+        filteredList.clear()
+        filteredList.addAll(results)
+        recipeAdapter.notifyDataSetChanged()
     }
 }

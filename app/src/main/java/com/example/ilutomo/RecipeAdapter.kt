@@ -20,15 +20,9 @@ class RecipeAdapter(
         val title: TextView = view.findViewById(R.id.tvRecipeTitle)
         val category: TextView = view.findViewById(R.id.tvRecipeCategory)
         val macros: TextView = view.findViewById(R.id.tvRecipeMacros)
-
-        // FIX: The ID in your XML is tvRecipePrepTime.
-        // We map it to a variable named 'totalTime' to match your new logic.
         val totalTime: TextView = view.findViewById(R.id.tvRecipePrepTime)
         val tags: TextView = view.findViewById(R.id.tvRecipeTags)
-
-        // Recommendation Match Score
         val tvMatchScore: TextView? = view.findViewById(R.id.tvMatchScore)
-
         val btnAdd: ImageView = view.findViewById(R.id.btnAddRecipe)
         val tvServings: TextView = view.findViewById(R.id.tvHomeServings)
         val btnPlus: ImageButton = view.findViewById(R.id.btnHomePlus)
@@ -49,17 +43,13 @@ class RecipeAdapter(
         holder.category.text = recipe.category
         holder.tvServings.text = multiplier.toString()
 
-        // --- TOTAL TIME BINDING ---
-        // Using the updated model field 'totalTime'
         holder.totalTime.text = if (recipe.totalTime > 0) "🕒 ${recipe.totalTime} mins" else "🕒 N/A"
 
-        // --- TASTE TAGS BINDING ---
         val activeTags = recipe.tasteProfile.filter { it.value }.keys.map {
             it.replaceFirstChar { char -> if (char.isLowerCase()) char.titlecase(Locale.getDefault()) else char.toString() }
         }
         holder.tags.text = if (activeTags.isNotEmpty()) "🏷️ ${activeTags.joinToString(", ")}" else "🏷️ No tags"
 
-        // --- MATCH SCORE VISIBILITY ---
         holder.tvMatchScore?.let {
             if (recipe.matchScore > 0) {
                 it.visibility = View.VISIBLE
@@ -69,11 +59,8 @@ class RecipeAdapter(
             }
         }
 
-        // Display Total Price
-        holder.tvPrice?.let {
-            val total = recipe.calculatedPrice * multiplier
-            it.text = "₱${String.format("%.2f", total)}"
-        }
+        // REMOVED TOTAL PRICE DISPLAY on the Home Page card
+        holder.tvPrice?.visibility = View.GONE
 
         // Macros calculation
         val p = (recipe.calculatedMacros["Protein"] ?: 0) * multiplier
