@@ -62,7 +62,6 @@ class HomeActivity : AppCompatActivity() {
         loadIngredientLibrary()
     }
 
-    // HELPER FUNCTION: Logs actions to Firestore for the PHP Admin Dashboard
     private fun logActivity(action: String, details: String) {
         val userEmail = auth.currentUser?.email ?: "Guest User"
         val log = hashMapOf(
@@ -98,10 +97,8 @@ class HomeActivity : AppCompatActivity() {
             .setView(dialogView)
             .setPositiveButton("Recommend") { _, _ ->
                 if (currentFridgeIngredients.isNotEmpty()) {
-                    // --- IMPORTANT LOG: Recommendation Search ---
                     val ingredientsText = currentFridgeIngredients.joinToString(", ")
                     logActivity("Fridge Recommendation", "User searched recipes using: $ingredientsText")
-
                     runRecommendationAlgorithm(currentFridgeIngredients)
                 }
             }
@@ -145,18 +142,11 @@ class HomeActivity : AppCompatActivity() {
         filteredList.clear()
         filteredList.addAll(results)
         recipeAdapter.notifyDataSetChanged()
-
-        if (results.isEmpty()) {
-            Toast.makeText(this, "No recipes found with these ingredients.", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "Found ${results.size} matches!", Toast.LENGTH_SHORT).show()
-        }
     }
 
     private fun setupSearch() {
         binding.searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(q: String?): Boolean {
-                // --- IMPORTANT LOG: Explicit Search Submit ---
                 if (!q.isNullOrBlank()) {
                     logActivity("Search", "User submitted search for: $q")
                 }
@@ -169,8 +159,6 @@ class HomeActivity : AppCompatActivity() {
             }
         })
     }
-
-    // ... [Remainder of your original methods: loadIngredientLibrary, fetchUserLocationAndData, etc.] ...
 
     private fun loadIngredientLibrary() {
         database.child("ingredient_library").addListenerForSingleValueEvent(object : ValueEventListener {
@@ -194,21 +182,17 @@ class HomeActivity : AppCompatActivity() {
             .addOnSuccessListener { document ->
                 if (document.exists()) {
                     val fullName = document.getString("name") ?: "User"
-                    updateWelcomeMessage(fullName.split(" ").firstOrNull() ?: fullName)
+                    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+                    val greeting = when (hour) {
+                        in 0..11 -> "Good Morning"
+                        in 12..16 -> "Good Afternoon"
+                        else -> "Good Evening"
+                    }
+                    binding.tvWelcome.text = "$greeting, ${fullName.split(" ").first()}!"
                 }
                 fetchPreferences()
             }
             .addOnFailureListener { fetchPreferences() }
-    }
-
-    private fun updateWelcomeMessage(name: String) {
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        val greeting = when (hour) {
-            in 0..11 -> "Good Morning"
-            in 12..16 -> "Good Afternoon"
-            else -> "Good Evening"
-        }
-        binding.tvWelcome.text = "$greeting, $name!"
     }
 
     private fun toFilterDouble(value: Any?, default: Double): Double {
@@ -230,7 +214,6 @@ class HomeActivity : AppCompatActivity() {
                         carbsMax = toFilterDouble(s.child("carbs_max").value, 1000.0).let { if (it <= 0) 1000.0 else it }
                         sugarMax = toFilterDouble(s.child("sugar_max").value, 1000.0).let { if (it <= 0) 1000.0 else it }
                         caloriesMax = toFilterDouble(s.child("calories_max").value, 10000.0).let { if (it <= 0) 10000.0 else it }
-
                         maxtotalTime = s.child("max_total_time").value?.toString()?.toIntOrNull() ?: 0
 
                         activeAllergens.clear()
@@ -256,16 +239,45 @@ class HomeActivity : AppCompatActivity() {
                             val r = child.getValue(Recipe::class.java) ?: continue
                             r.id = child.key!!
                             r.totalTime = child.child("totalTime").value?.toString()?.toIntOrNull() ?: 0
+
                             val tasteMap = mutableMapOf<String, Boolean>()
                             child.child("tasteProfile").children.forEach { t ->
                                 tasteMap[t.key ?: ""] = t.value == true
                             }
                             r.tasteProfile = tasteMap
 
-                            // [Macro calculation logic remains same as provided]
+                            var pro = 0.0; var carb = 0.0; var sug = 0.0; var cal = 0.0; var sod = 0.0
+                            var totalPrice = 0.0
+                            val individualPrices = mutableMapOf<String, Double>()
+
+                            r.ingredients?.forEach { (name, amt) ->
+                                val lib = ingredientLibrary[name]
+                                if (lib != null) {
+                                    val qty = amt.toString().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0
+                                    val factor = if (name.contains("Egg", true)) qty else (qty / 50.0)
+                                    pro += factor * toFilterDouble(lib.child("pro").value, 0.0)
+                                    carb += factor * toFilterDouble(lib.child("carb").value, 0.0)
+                                    sug += factor * toFilterDouble(lib.child("sugar").value, 0.0)
+                                    cal += factor * toFilterDouble(lib.child("cal").value, 0.0)
+                                    sod += factor * toFilterDouble(lib.child("sodium").value, 0.0)
+
+                                    val standardPrice = toFilterDouble(lib.child("price").value, 0.0)
+                                    val cost = standardPrice * (qty / 100.0)
+                                    totalPrice += cost
+                                    individualPrices[name] = cost
+                                }
+                            }
+                            r.calculatedPrice = totalPrice
+                            r.ingredientPrices = individualPrices
+                            r.calculatedMacros["Protein"] = pro.toInt()
+                            r.calculatedMacros["Carbs"] = carb.toInt()
+                            r.calculatedMacros["Sugar"] = sug.toInt()
+                            r.calculatedMacros["Calories"] = cal.toInt()
+                            r.calculatedMacros["Sodium"] = sod.toInt()
+
                             allRecipes.add(r)
                         } catch (e: Exception) {
-                            Log.e("RECIPE_LOAD", "Error parsing ${child.key}: ${e.message}")
+                            Log.e("RECIPE_LOAD", "Error: ${e.message}")
                         }
                     }
                 }
@@ -279,9 +291,20 @@ class HomeActivity : AppCompatActivity() {
         filteredList.clear()
         val baseFiltered = allRecipes.filter { r ->
             if (!isRecipeSafeForUser(r)) return@filter false
+
+            val p = r.calculatedMacros["Protein"]?.toDouble() ?: 0.0
+            val c = r.calculatedMacros["Carbs"]?.toDouble() ?: 0.0
+            val s = r.calculatedMacros["Sugar"]?.toDouble() ?: 0.0
+            val cal = r.calculatedMacros["Calories"]?.toDouble() ?: 0.0
+
+            val matchesBudget = r.calculatedPrice in budgetMin..budgetMax
+            val matchesMacros = (p >= proteinMin && p <= proteinMax) && (c <= carbsMax) && (s <= sugarMax) && (cal <= caloriesMax)
             val matchesSearch = if (searchQuery.isEmpty()) true else r.title.contains(searchQuery, true)
+            val matchestotalTime = if (maxtotalTime > 0) r.totalTime <= maxtotalTime else true
+            val matchesTaste = if (selectedTaste.isNotEmpty()) r.tasteProfile[selectedTaste.lowercase()] == true else true
+
             r.matchScore = 0.0
-            matchesSearch // Simplified for brevity, add back your macro/budget checks here
+            matchesBudget && matchesMacros && matchesSearch && matchestotalTime && matchesTaste
         }
         filteredList.addAll(baseFiltered)
         recipeAdapter.notifyDataSetChanged()
@@ -303,9 +326,7 @@ class HomeActivity : AppCompatActivity() {
     private fun setupRecyclerView() {
         recipeAdapter = RecipeAdapter(filteredList) { r ->
             val uid = auth.currentUser?.uid ?: return@RecipeAdapter
-            // --- IMPORTANT LOG: Adding Recipe from Home ---
             logActivity("Added Recipe", "User added ${r.title} to their collection from Home.")
-
             database.child("Users").child(uid).child("AddedRecipes").child(r.id).setValue(r)
                 .addOnSuccessListener { Toast.makeText(this, "Added to Recipes!", Toast.LENGTH_SHORT).show() }
         }

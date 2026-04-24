@@ -37,16 +37,8 @@ class RecipeDetailsActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         currentRecipe = intent.getSerializableExtra("RECIPE") as? Recipe
+        val recipe = currentRecipe ?: return finish()
 
-        val recipe = currentRecipe
-        if (recipe == null) {
-            Log.e("PANTRY_DEBUG", "Recipe object is NULL from Intent!")
-            Toast.makeText(this, "Error: Recipe data missing", Toast.LENGTH_SHORT).show()
-            finish()
-            return
-        }
-
-        // --- IMPORTANT LOG: Viewing Recipe ---
         logActivity("View Recipe", "User is viewing details for: ${recipe.title}")
 
         binding.detailToolbar.setNavigationOnClickListener { finish() }
@@ -69,7 +61,6 @@ class RecipeDetailsActivity : AppCompatActivity() {
         fetchUserLocationAndData(recipe)
     }
 
-    // HELPER FUNCTION: Logs actions to Firestore for the PHP Admin Dashboard
     private fun logActivity(action: String, details: String) {
         val userEmail = auth.currentUser?.email ?: "Guest User"
         val log = hashMapOf(
@@ -79,7 +70,6 @@ class RecipeDetailsActivity : AppCompatActivity() {
             "timestamp" to com.google.firebase.Timestamp.now()
         )
         firestore.collection("UserActivities").add(log)
-            .addOnFailureListener { e -> Log.e("LOG_ERROR", "Failed to log: ${e.message}") }
     }
 
     private fun updateServingUI() {
@@ -96,9 +86,7 @@ class RecipeDetailsActivity : AppCompatActivity() {
                 userLng = document.getDouble("longitude") ?: 0.0
                 loadBusinessData(recipe)
             }
-            .addOnFailureListener {
-                loadBusinessData(recipe)
-            }
+            .addOnFailureListener { loadBusinessData(recipe) }
     }
 
     private fun loadBusinessData(recipe: Recipe) {
@@ -125,9 +113,7 @@ class RecipeDetailsActivity : AppCompatActivity() {
                 }
                 setupUI(recipe)
             }
-            override fun onCancelled(error: DatabaseError) {
-                Log.e("DB_ERROR", error.message)
-            }
+            override fun onCancelled(error: DatabaseError) {}
         })
     }
 
@@ -141,16 +127,12 @@ class RecipeDetailsActivity : AppCompatActivity() {
 
     private fun setupUI(recipe: Recipe) {
         val multiplier = recipe.servings
-
         binding.tvDetailTitle.text = recipe.title
         binding.tvDetailDescription.text = recipe.description
         binding.tvDetailServings.text = multiplier.toString()
-
         binding.tvDetailPrepTime.text = if (recipe.totalTime > 0) "🕒 ${recipe.totalTime} mins" else "🕒 N/A"
 
-        val activeTags = recipe.tasteProfile.filter { it.value }.keys.map {
-            it.replaceFirstChar { char -> if (char.isLowerCase()) char.titlecase(Locale.getDefault()) else char.toString() }
-        }
+        val activeTags = recipe.tasteProfile.filter { it.value }.keys.map { it.capitalize() }
         binding.tvDetailTags.text = if (activeTags.isNotEmpty()) "🏷️ ${activeTags.joinToString(", ")}" else "🏷️ No tags"
 
         val totalPrice = recipe.calculatedPrice * multiplier
@@ -178,73 +160,46 @@ class RecipeDetailsActivity : AppCompatActivity() {
                 setTextColor(Color.BLACK)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                 setPadding(0, 8, 0, 8)
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
             }
             binding.llIngredientsList.addView(tvName)
         }
 
-        binding.tvStepsList.text = recipe.steps?.mapIndexed { i, s ->
-            "${i + 1}. $s"
-        }?.joinToString("\n\n") ?: "No cooking steps provided."
+        binding.tvStepsList.text = recipe.steps?.mapIndexed { i, s -> "${i + 1}. $s" }?.joinToString("\n\n") ?: "No steps."
     }
 
     private fun scaleAmount(amount: String, multiplier: Int): String {
         val numberRegex = "([0-9]*\\.?[0-9]+)".toRegex()
         val match = numberRegex.find(amount)
-
         return if (match != null) {
-            val originalValue = match.value.toDouble()
-            val scaledValue = originalValue * multiplier
-            val formattedValue = if (scaledValue % 1 == 0.0) scaledValue.toInt().toString() else "%.1f".format(scaledValue)
-            amount.replaceFirst(match.value, formattedValue)
-        } else {
-            amount
-        }
+            val scaledValue = match.value.toDouble() * multiplier
+            val formatted = if (scaledValue % 1 == 0.0) scaledValue.toInt().toString() else "%.1f".format(scaledValue)
+            amount.replaceFirst(match.value, formatted)
+        } else amount
     }
 
     private fun addToPantry(recipe: Recipe) {
         val uid = auth.currentUser?.uid ?: return
         val pantryRef = database.child("Users").child(uid).child("Pantry")
-        val ingredients = recipe.ingredients
-        val multiplier = recipe.servings
+        logActivity("Pantry Update", "Added ingredients for ${recipe.title} to pantry.")
 
-        if (ingredients.isNullOrEmpty()) {
-            Toast.makeText(this, "No ingredients found", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        // --- IMPORTANT LOG: Adding to Pantry ---
-        logActivity("Pantry Update", "Added ingredients for ${recipe.title} ($multiplier servings) to pantry.")
-
-        ingredients.forEach { (name, amount) ->
+        recipe.ingredients?.forEach { (name, amount) ->
             val key = pantryRef.push().key ?: return@forEach
-            val finalAmount = scaleAmount(amount.toString(), multiplier)
-            val ingredientBasePrice = recipe.ingredientPrices?.get(name) ?: 0.0
-            val finalPrice = ingredientBasePrice * multiplier
-
             val pantryItem = mapOf(
                 "id" to key,
                 "name" to name,
-                "amount" to finalAmount,
-                "price" to finalPrice,
+                "amount" to scaleAmount(amount.toString(), recipe.servings),
+                "price" to (recipe.ingredientPrices?.get(name) ?: 0.0) * recipe.servings,
                 "recipeTitle" to recipe.title,
                 "isChecked" to true
             )
             pantryRef.child(key).setValue(pantryItem)
         }
-        Toast.makeText(this, "Added to Pantry for $multiplier serving(s)!", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Added to Pantry!", Toast.LENGTH_SHORT).show()
     }
 
     private fun saveRecipeToMyList(recipe: Recipe) {
         val uid = auth.currentUser?.uid ?: return
-        val savedRecipesRef = database.child("Users").child(uid).child("AddedRecipes").child(recipe.id)
-
-        // --- IMPORTANT LOG: Saving Recipe ---
         logActivity("Saved Recipe", "User added ${recipe.title} to their saved list.")
-
         val saveMap = mapOf(
             "id" to recipe.id,
             "title" to recipe.title,
@@ -257,13 +212,7 @@ class RecipeDetailsActivity : AppCompatActivity() {
             "tasteProfile" to recipe.tasteProfile,
             "servings" to 1
         )
-
-        savedRecipesRef.setValue(saveMap)
-            .addOnSuccessListener {
-                Toast.makeText(this, "Saved to My Recipes!", Toast.LENGTH_SHORT).show()
-            }
-            .addOnFailureListener {
-                Toast.makeText(this, "Failed to save recipe", Toast.LENGTH_SHORT).show()
-            }
+        database.child("Users").child(uid).child("AddedRecipes").child(recipe.id).setValue(saveMap)
+            .addOnSuccessListener { Toast.makeText(this, "Saved!", Toast.LENGTH_SHORT).show() }
     }
 }
