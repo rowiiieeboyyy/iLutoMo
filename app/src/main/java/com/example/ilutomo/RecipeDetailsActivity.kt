@@ -12,26 +12,36 @@ import com.example.ilutomo.databinding.ActivityRecipeDetailsBinding
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import com.google.firebase.firestore.FirebaseFirestore
+import java.util.*
 import kotlin.math.*
 
 class RecipeDetailsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityRecipeDetailsBinding
     private val database = FirebaseDatabase.getInstance().reference
+    private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
 
-    private val allStoreItems = mutableListOf<InventoryItem>()
+    private val inventoryMap = mutableMapOf<String, MutableList<InventoryItem>>()
+    private val businessDetailsMap = mutableMapOf<String, BusinessLocation>()
+    private var userLat: Double = 0.0
+    private var userLng: Double = 0.0
+
     private var currentRecipe: Recipe? = null
+
+    data class BusinessLocation(val address: String, val lat: Double, val lng: Double, var distance: Double = 0.0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityRecipeDetailsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Using the updated serializable retrieval
         currentRecipe = intent.getSerializableExtra("RECIPE") as? Recipe
 
         val recipe = currentRecipe
         if (recipe == null) {
+            Log.e("PANTRY_DEBUG", "Recipe object is NULL from Intent!")
             Toast.makeText(this, "Error: Recipe data missing", Toast.LENGTH_SHORT).show()
             finish()
             return
@@ -54,7 +64,7 @@ class RecipeDetailsActivity : AppCompatActivity() {
         binding.fabAddToPantry.setOnClickListener { addToPantry(recipe) }
         binding.btnSaveRecipe.setOnClickListener { saveRecipeToMyList(recipe) }
 
-        loadBusinessData(recipe)
+        fetchUserLocationAndData(recipe)
     }
 
     private fun updateServingUI() {
@@ -63,34 +73,40 @@ class RecipeDetailsActivity : AppCompatActivity() {
         setupUI(recipe)
     }
 
+    private fun fetchUserLocationAndData(recipe: Recipe) {
+        val uid = auth.currentUser?.uid ?: return
+        firestore.collection("users").document(uid).get()
+            .addOnSuccessListener { document ->
+                userLat = document.getDouble("latitude") ?: 0.0
+                userLng = document.getDouble("longitude") ?: 0.0
+                loadBusinessData(recipe)
+            }
+            .addOnFailureListener {
+                loadBusinessData(recipe)
+            }
+    }
+
     private fun loadBusinessData(recipe: Recipe) {
         database.child("Businesses").addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                allStoreItems.clear()
+                inventoryMap.clear()
+                businessDetailsMap.clear()
                 for (bizSnapshot in snapshot.children) {
-                    val inventoryNode = bizSnapshot.child("inventory")
-                    if (inventoryNode.exists()) {
-                        for (itemSnap in inventoryNode.children) {
-                            try {
-                                val itm = InventoryItem().apply {
-                                    id = itemSnap.key ?: ""
-                                    name = itemSnap.child("name").value?.toString() 
-                                        ?: itemSnap.child("itemName").value?.toString() ?: ""
-                                    ingredient = itemSnap.child("ingredient").value?.toString() ?: ""
-                                    ingredientTag = itemSnap.child("ingredientTag").value?.toString() ?: ""
-                                    itemGrade = itemSnap.child("itemGrade").value?.toString() ?: "Budget"
-                                    size = itemSnap.child("size").value?.toString() ?: ""
-                                    img = itemSnap.child("img").value?.toString() 
-                                        ?: itemSnap.child("imageUrl").value?.toString() ?: ""
-                                    price = itemSnap.child("price").value?.toString()?.toDoubleOrNull() ?: 0.0
-                                    stock = itemSnap.child("stock").value?.toString()?.toIntOrNull() ?: 0
-                                }
-                                if (itm.name.isNotBlank()) allStoreItems.add(itm)
-                            } catch (e: Exception) {
-                                Log.e("DATA_PARSE", "Error parsing ${itemSnap.key}: ${e.message}")
-                            }
-                        }
+                    val bizName = bizSnapshot.key ?: continue
+                    val details = bizSnapshot.child("details")
+                    val lat = details.child("latitude").value?.toString()?.toDoubleOrNull() ?: 0.0
+                    val lng = details.child("longitude").value?.toString()?.toDoubleOrNull() ?: 0.0
+                    val distance = calculateDistance(userLat, userLng, lat, lng)
+                    businessDetailsMap[bizName] = BusinessLocation(
+                        details.child("address").value?.toString() ?: "",
+                        lat, lng, distance
+                    )
+
+                    val items = mutableListOf<InventoryItem>()
+                    bizSnapshot.child("inventory").children.forEach { itemSnap ->
+                        itemSnap.getValue(InventoryItem::class.java)?.let { items.add(it) }
                     }
+                    inventoryMap[bizName] = items
                 }
                 setupUI(recipe)
             }
@@ -100,49 +116,36 @@ class RecipeDetailsActivity : AppCompatActivity() {
         })
     }
 
-    private fun findCheapestMatch(ingredientName: String): InventoryItem? {
-        val queryClean = ingredientName.lowercase().trim().replace(Regex("[^a-z0-9 ]"), " ")
-        val queryWords = queryClean.split(" ").map { it.removeSuffix("s") }.filter { it.isNotBlank() }
-        
-        if (queryWords.isEmpty()) return null
-
-        val scoredItems = allStoreItems.mapNotNull { item ->
-            if (item.stock <= 0 || item.price <= 0) return@mapNotNull null
-            
-            val itemName = item.name.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
-            val itemIng = item.ingredient.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
-            val itemTag = item.ingredientTag.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
-            
-            val combined = "$itemName $itemIng $itemTag"
-            
-            var score = 0
-            if (itemName.trim() == queryClean || itemIng.trim() == queryClean) {
-                score = 1000
-            } else {
-                val matchCount = queryWords.count { qWord -> combined.contains(qWord) }
-                if (matchCount == 0) return@mapNotNull null
-                score = matchCount
-            }
-            
-            item to score
-        }
-
-        if (scoredItems.isEmpty()) return null
-
-        val maxScore = scoredItems.maxOf { it.second }
-        val bestMatches = scoredItems.filter { it.second == maxScore }.map { it.first }
-
-        return bestMatches.minByOrNull { it.price }
+    private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val r = 6371.0
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val a = sin(dLat / 2).pow(2) + cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2).pow(2)
+        return r * 2 * atan2(sqrt(a), sqrt(1 - a))
     }
 
     private fun setupUI(recipe: Recipe) {
         val multiplier = recipe.servings
+
         binding.tvDetailTitle.text = recipe.title
         binding.tvDetailDescription.text = recipe.description
         binding.tvDetailServings.text = multiplier.toString()
 
+        // --- UPDATED: DISPLAY TOTAL TIME ---
+        // Note: Check your activity_recipe_details.xml. If the ID is tvDetailPrepTime,
+        // use binding.tvDetailPrepTime.text instead.
+        binding.tvDetailPrepTime.text = if (recipe.totalTime > 0) "🕒 ${recipe.totalTime} mins" else "🕒 N/A"
+
+        val activeTags = recipe.tasteProfile.filter { it.value }.keys.map {
+            it.replaceFirstChar { char -> if (char.isLowerCase()) char.titlecase(Locale.getDefault()) else char.toString() }
+        }
+        binding.tvDetailTags.text = if (activeTags.isNotEmpty()) "🏷️ ${activeTags.joinToString(", ")}" else "🏷️ No tags"
+
+        val totalPrice = recipe.calculatedPrice * multiplier
+        binding.tvDetailPrice.text = "₱${String.format("%.2f", totalPrice)}"
+
         val imageResId = resources.getIdentifier(recipe.imageResourceName, "drawable", packageName)
-        binding.ivRecipeDetailImage.setImageResource(if (imageResId != 0) imageResId else R.drawable.placeholder_food)
+        binding.ivRecipeDetailImage.setImageResource(if (imageResId != 0) imageResId else android.R.drawable.ic_menu_gallery)
 
         val macros = recipe.calculatedMacros
         binding.tvDetailCalories.text = ((macros["Calories"] ?: 0) * multiplier).toString()
@@ -152,119 +155,98 @@ class RecipeDetailsActivity : AppCompatActivity() {
         binding.tvDetailSodium.text = "${(macros["Sodium"] ?: 0) * multiplier}mg"
 
         binding.llIngredientsList.removeAllViews()
-        var estimatedTotalPrice = 0.0
-
         recipe.ingredients?.forEach { (name, rawAmount) ->
-            val amountStr = rawAmount.toString()
-            val scaledAmount = scaleAmount(amountStr, multiplier)
-            
-            val cheapestItem = findCheapestMatch(name)
-
-            val priceText: String
-            if (cheapestItem != null) {
-                val orderCount = calculateOrderCount(amountStr, cheapestItem.size, multiplier)
-                val cost = cheapestItem.price * orderCount
-                
-                val quantityText = if (orderCount > 1) " (x$orderCount)" else ""
-                priceText = " - ₱${String.format("%.2f", cost)} (${cheapestItem.name})$quantityText"
-                estimatedTotalPrice += cost
-            } else {
-                priceText = " - Not Available"
-            }
+            val scaledAmount = scaleAmount(rawAmount.toString(), multiplier)
+            val ingredientBasePrice = recipe.ingredientPrices?.get(name) ?: 0.0
+            val ingredientTotalPrice = ingredientBasePrice * multiplier
+            val priceText = if (ingredientTotalPrice > 0) " - ₱${String.format("%.2f", ingredientTotalPrice)}" else ""
 
             val tvName = TextView(this).apply {
                 text = "• $name ($scaledAmount)$priceText"
-                setTextColor(if (cheapestItem != null) Color.BLACK else Color.RED)
+                setTextColor(Color.BLACK)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                 setPadding(0, 8, 0, 8)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
             }
             binding.llIngredientsList.addView(tvName)
         }
 
-        binding.tvDetailPrice.text = "₱${String.format("%.2f", estimatedTotalPrice)}"
-        binding.tvStepsList.text = recipe.steps?.mapIndexed { i, s -> "${i + 1}. $s" }?.joinToString("\n\n") ?: "No cooking steps provided."
+        binding.tvStepsList.text = recipe.steps?.mapIndexed { i, s ->
+            "${i + 1}. $s"
+        }?.joinToString("\n\n") ?: "No cooking steps provided."
     }
 
     private fun scaleAmount(amount: String, multiplier: Int): String {
         val numberRegex = "([0-9]*\\.?[0-9]+)".toRegex()
         val match = numberRegex.find(amount)
+
         return if (match != null) {
-            val scaledValue = match.value.toDouble() * multiplier
+            val originalValue = match.value.toDouble()
+            val scaledValue = originalValue * multiplier
             val formattedValue = if (scaledValue % 1 == 0.0) scaledValue.toInt().toString() else "%.1f".format(scaledValue)
             amount.replaceFirst(match.value, formattedValue)
-        } else amount
-    }
-
-    private fun extractNumericValue(input: String): Double {
-        val numberRegex = "([0-9]*\\.?[0-9]+)".toRegex()
-        return numberRegex.find(input)?.value?.toDoubleOrNull() ?: 0.0
-    }
-
-    private fun calculateOrderCount(requiredPerServing: String, itemSize: String, multiplier: Int): Int {
-        val reqValue = extractNumericValue(requiredPerServing)
-        val sizeValue = extractNumericValue(itemSize)
-        
-        // If we can't determine the size or requirement, fall back to linear scaling (multiplier)
-        if (sizeValue <= 0 || reqValue <= 0) return multiplier
-        
-        val totalNeeded = reqValue * multiplier
-        return ceil(totalNeeded / sizeValue).toInt().coerceAtLeast(1)
+        } else {
+            amount
+        }
     }
 
     private fun addToPantry(recipe: Recipe) {
         val uid = auth.currentUser?.uid ?: return
         val pantryRef = database.child("Users").child(uid).child("Pantry")
+        val ingredients = recipe.ingredients
         val multiplier = recipe.servings
 
-        val updates = mutableMapOf<String, Any>()
+        if (ingredients.isNullOrEmpty()) {
+            Toast.makeText(this, "No ingredients found", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-        recipe.ingredients?.forEach { (name, amount) ->
-            val cheapestItem = findCheapestMatch(name)
+        ingredients.forEach { (name, amount) ->
             val key = pantryRef.push().key ?: return@forEach
-
-            val amountStr = amount.toString()
-            var orderCount = multiplier
-            var linePrice = 0.0
-            
-            if (cheapestItem != null) {
-                orderCount = calculateOrderCount(amountStr, cheapestItem.size, multiplier)
-                linePrice = cheapestItem.price * orderCount
-            }
+            val finalAmount = scaleAmount(amount.toString(), multiplier)
+            val ingredientBasePrice = recipe.ingredientPrices?.get(name) ?: 0.0
+            val finalPrice = ingredientBasePrice * multiplier
 
             val pantryItem = mapOf(
                 "id" to key,
-                "name" to (cheapestItem?.name ?: name), 
-                "amount" to scaleAmount(amountStr, multiplier),
+                "name" to name,
+                "amount" to finalAmount,
+                "price" to finalPrice,
                 "recipeTitle" to recipe.title,
-                "isChecked" to true,
-                "count" to orderCount,
-                "price" to linePrice,
-                "imageUrl" to (cheapestItem?.img ?: ""),
-                "ingredientTag" to (cheapestItem?.ingredient ?: name)
+                "isChecked" to true
             )
-            updates[key] = pantryItem
+            pantryRef.child(key).setValue(pantryItem)
         }
-        
-        pantryRef.updateChildren(updates).addOnSuccessListener {
-            Toast.makeText(this, "Added to Pantry!", Toast.LENGTH_SHORT).show()
-        }
+        Toast.makeText(this, "Added to Pantry for $multiplier serving(s)!", Toast.LENGTH_SHORT).show()
     }
 
     private fun saveRecipeToMyList(recipe: Recipe) {
         val uid = auth.currentUser?.uid ?: return
-        val savedRecipesRef = database.child("Users").child(uid).child("AddedRecipes")
-        val key = savedRecipesRef.push().key ?: return
+        val savedRecipesRef = database.child("Users").child(uid).child("AddedRecipes").child(recipe.id)
+
+        // --- UPDATED: SAVING TOTALTIME ---
         val saveMap = mapOf(
-            "id" to key,
+            "id" to recipe.id,
             "title" to recipe.title,
             "description" to recipe.description,
             "category" to recipe.category,
             "imageResourceName" to recipe.imageResourceName,
             "ingredients" to recipe.ingredients,
             "steps" to recipe.steps,
+            "totalTime" to recipe.totalTime, // Matches new model
+            "tasteProfile" to recipe.tasteProfile,
             "servings" to 1
         )
-        savedRecipesRef.child(key).setValue(saveMap)
-            .addOnSuccessListener { Toast.makeText(this, "Saved to My Recipes!", Toast.LENGTH_SHORT).show() }
+
+        savedRecipesRef.setValue(saveMap)
+            .addOnSuccessListener {
+                Toast.makeText(this, "Saved to My Recipes!", Toast.LENGTH_SHORT).show()
+            }
+            .addOnFailureListener {
+                Toast.makeText(this, "Failed to save recipe", Toast.LENGTH_SHORT).show()
+            }
     }
 }

@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
+import com.google.firebase.firestore.FirebaseFirestore // Added for Admin Dashboard
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -25,6 +26,7 @@ class OrderConfirmationActivity : AppCompatActivity() {
 
     private val database = FirebaseDatabase.getInstance().reference
     private val auth = FirebaseAuth.getInstance()
+    private val firestore = FirebaseFirestore.getInstance() // Initialize Firestore
 
     private var storeName: String = ""
     private var storeUid: String = ""
@@ -59,7 +61,10 @@ class OrderConfirmationActivity : AppCompatActivity() {
 
         tvPickupTime.setOnClickListener { showTimePicker() }
         findViewById<ImageView>(R.id.order_back_arrow)?.setOnClickListener { finish() }
-        btnCancel.setOnClickListener { finish() }
+        btnCancel.setOnClickListener {
+            logActionToFirestore("Cancelled Order", "User exited at confirmation for $storeName")
+            finish()
+        }
         btnPlaceOrder.setOnClickListener { executeFirebaseSave() }
     }
 
@@ -118,13 +123,15 @@ class OrderConfirmationActivity : AppCompatActivity() {
         val orderRef = database.child("BusinessOrders").child(storeUid).push()
         val orderId = orderRef.key ?: return
 
+        val totalPrice = selectedItems.sumOf { it.price }
+
         val orderData = Order(
             id = orderId,
             userId = uid,
             businessUid = storeUid,
             businessName = storeName,
             items = selectedItems,
-            totalAmount = selectedItems.sumOf { it.price },
+            totalAmount = totalPrice,
             timestamp = System.currentTimeMillis(),
             status = "Pending",
             pickupAddress = "Teresa, Rizal",
@@ -136,9 +143,14 @@ class OrderConfirmationActivity : AppCompatActivity() {
         updates["Users/$uid/MyOrders/$orderId"] = orderData
 
         database.updateChildren(updates).addOnSuccessListener {
-            // Deduct stock before clearing pantry
+            // LOG TO FIRESTORE FOR PHP ADMIN DASHBOARD
+            logActionToFirestore(
+                "Placed Order",
+                "Ordered ${selectedItems.size} items from $storeName | Total: ₱${"%.2f".format(totalPrice)}"
+            )
+
             deductInventoryStock(storeUid, selectedItems)
-            
+
             val pantryRef = database.child("Users").child(uid).child("Pantry")
             selectedItems.forEach { item -> pantryRef.child(item.id).removeValue() }
 
@@ -153,24 +165,34 @@ class OrderConfirmationActivity : AppCompatActivity() {
         }
     }
 
+    // Helper function to send logs to the PHP Dashboard
+    private fun logActionToFirestore(action: String, details: String) {
+        val userEmail = auth.currentUser?.email ?: "Guest User"
+        val log = hashMapOf(
+            "userEmail" to userEmail,
+            "action" to action,
+            "details" to details,
+            "timestamp" to com.google.firebase.Timestamp.now()
+        )
+        firestore.collection("UserActivities").add(log)
+    }
+
     private fun deductInventoryStock(businessUid: String, items: List<PantryIngredient>) {
         val inventoryRef = database.child("Businesses").child(businessUid).child("inventory")
-        
+
         items.forEach { orderedItem ->
-            // Use the brandName/name which is the key in the inventory database
-            val itemKey = orderedItem.name 
-            
+            val itemKey = orderedItem.name
+
             inventoryRef.child(itemKey).runTransaction(object : Transaction.Handler {
                 override fun doTransaction(mutableData: MutableData): Transaction.Result {
                     val inventoryItem = mutableData.getValue(InventoryItem::class.java)
                         ?: return Transaction.success(mutableData)
-                    
+
                     val currentStock = inventoryItem.stock
                     val orderedCount = orderedItem.count
-                    
-                    // Deduct the stock
+
                     inventoryItem.stock = (currentStock - orderedCount).coerceAtLeast(0)
-                    
+
                     mutableData.value = inventoryItem
                     return Transaction.success(mutableData)
                 }

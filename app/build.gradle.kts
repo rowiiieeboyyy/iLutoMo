@@ -47,6 +47,8 @@ dependencies {
     implementation("com.google.firebase:firebase-database-ktx")
     implementation("com.google.firebase:firebase-storage-ktx")
     implementation("com.google.firebase:firebase-analytics-ktx")
+    // Google Sign-In Library
+    implementation("com.google.android.gms:play-services-auth:21.1.1")
 
     // Location library (Critical for FusedLocationProviderClient)
     implementation("com.google.android.gms:play-services-location:21.2.0")
