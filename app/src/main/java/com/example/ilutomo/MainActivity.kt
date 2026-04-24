@@ -69,6 +69,8 @@ class MainActivity : AppCompatActivity() {
             auth.signInWithEmailAndPassword(email, password).addOnCompleteListener(this) { task ->
                 if (task.isSuccessful) {
                     saveCredentials(email, password, cbRememberMe.isChecked)
+                    val userEmail = auth.currentUser?.email ?: email
+                    logActivityToAdmin(userEmail, "Login", "Manual Email/Password Login")
                     auth.currentUser?.uid?.let { checkUserTypeAndRedirect(it) }
                 } else {
                     Toast.makeText(this, "Login failed: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
@@ -78,8 +80,11 @@ class MainActivity : AppCompatActivity() {
 
         // 2. GOOGLE LOGIN
         btnGoogle.setOnClickListener {
-            val signInIntent = googleSignInClient.signInIntent
-            startActivityForResult(signInIntent, 1001)
+            // FIX 1: Force account picker by signing out of the client before starting the intent
+            googleSignInClient.signOut().addOnCompleteListener {
+                val signInIntent = googleSignInClient.signInIntent
+                startActivityForResult(signInIntent, 1001)
+            }
         }
 
         btnSignUp.setOnClickListener {
@@ -115,7 +120,8 @@ class MainActivity : AppCompatActivity() {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         auth.signInWithCredential(credential).addOnCompleteListener(this) { task ->
             if (task.isSuccessful) {
-                auth.currentUser?.uid?.let { checkUserTypeAndRedirect(it) }
+                val user = auth.currentUser
+                user?.let { checkUserTypeAndRedirect(it.uid) }
             } else {
                 Toast.makeText(this, "Firebase Authentication failed.", Toast.LENGTH_SHORT).show()
             }
@@ -134,10 +140,16 @@ class MainActivity : AppCompatActivity() {
         editor.apply()
     }
 
+    // FIX 2: Check existence to avoid duplicate "Registration" logs on Admin Dashboard
     private fun checkUserTypeAndRedirect(uid: String) {
+        val currentUserEmail = auth.currentUser?.email ?: "Unknown"
+
         db.collection("users").document(uid).get().addOnSuccessListener { document ->
             if (document.exists()) {
-                val type = document.getString("accountType")
+                // Existing user: Log as Login
+                val type = document.getString("accountType") ?: "Personal"
+                logActivityToAdmin(currentUserEmail, "Login", "Google Login into $type account")
+
                 val intent = if (type == "Business") {
                     Intent(this, BusinessDashboardActivity::class.java)
                 } else {
@@ -146,11 +158,25 @@ class MainActivity : AppCompatActivity() {
                 startActivity(intent)
                 finish()
             } else {
-                // If new Gmail user, redirect to profile setup or default to User
-                val intent = Intent(this, HomeActivity::class.java)
+                // NEW Gmail user: We need to send them to SignUpActivity to choose account type
+                // This prevents them from skipping the "Personal vs Business" choice
+                logActivityToAdmin(currentUserEmail, "Auth Initialized", "New Google user redirected to SignUp")
+
+                val intent = Intent(this, SignUpActivity::class.java)
                 startActivity(intent)
                 finish()
             }
         }
+    }
+
+    // Helper for Admin Dashboard Logging
+    private fun logActivityToAdmin(email: String, action: String, details: String) {
+        val log = hashMapOf(
+            "userEmail" to email,
+            "action" to action,
+            "details" to details,
+            "timestamp" to com.google.firebase.Timestamp.now()
+        )
+        db.collection("UserActivities").add(log)
     }
 }
