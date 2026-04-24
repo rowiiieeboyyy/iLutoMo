@@ -201,7 +201,7 @@
                     android:id="@+id/btnViewManual"
                     android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:layout_marginTop="8dp" android:backgroundTint="#FFFFFF"
-                    android:text="Manual" android:textAllCaps="false" android:textColor="#2D5A27"
+                    android:text="Users Manual" android:textAllCaps="false" android:textColor="#2D5A27"
                     app:strokeColor="#2D5A27" app:strokeWidth="1dp" app:cornerRadius="15dp" />
 
             </LinearLayout>
