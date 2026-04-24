@@ -4,9 +4,6 @@ import com.google.firebase.database.Exclude
 import com.google.firebase.database.IgnoreExtraProperties
 import java.io.Serializable
 
-/**
- * Model for Recipe data stored in Firebase.
- */
 @IgnoreExtraProperties
 data class Recipe(
     var id: String = "",
@@ -19,22 +16,19 @@ data class Recipe(
     var steps: List<String>? = mutableListOf(),
     var macros: Map<String, String>? = mutableMapOf(),
 
-    // NEW: Fields for Taste Ranking and Prep Time
+    // These must match the keys in your Firebase exactly
     var totalTime: Int = 0,
     var tasteProfile: Map<String, Boolean> = mutableMapOf(),
 
-    // Excluded from Firebase: Local portion control
     @get:Exclude
     var servings: Int = 1,
 
-    // Excluded from Firebase: UI/Calculation results
     @get:Exclude
     var calculatedPrice: Double = 0.0,
-    
+
     @get:Exclude
     var isMissingIngredients: Boolean = false,
 
-    // For the "Detailed Nutrition" breakdown
     @get:Exclude
     var ingredientPrices: MutableMap<String, Double> = mutableMapOf(),
 
@@ -47,7 +41,6 @@ data class Recipe(
         "Sodium" to 0
     ),
 
-    // NEW: Excluded field to store the match score during ranking
     @get:Exclude
     var matchScore: Double = 0.0
 ) : Serializable

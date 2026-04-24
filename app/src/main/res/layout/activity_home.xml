@@ -62,15 +62,74 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="16dp"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="4dp"
         android:text="💡 What can I cook with my ingredients?"
         android:textColor="#2D5A27"
         android:textAllCaps="false"
+        android:textSize="12sp"
         app:icon="@android:drawable/ic_menu_search"
         app:iconTint="#2D5A27"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/searchView" />
+
+    <HorizontalScrollView
+        android:id="@+id/svFilters"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:scrollbars="none"
+        app:layout_constraintTop_toBottomOf="@id/btnRecommend">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/cgTasteFilters"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            app:selectionRequired="false"
+            app:singleLine="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipShortPrep"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⏱️ Quick (≤20m)"
+                app:chipBackgroundColor="@color/white"
+                app:chipStrokeColor="#2D5A27" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipSweet"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Sweet" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipSpicy"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Spicy" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipSavory"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Savory" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipSour"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Sour" />
+
+        </com.google.android.material.chip.ChipGroup>
+    </HorizontalScrollView>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvHomeRecipes"
@@ -81,7 +140,7 @@
         app:layout_constraintBottom_toTopOf="@id/bottomNav"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btnRecommend" />
+        app:layout_constraintTop_toBottomOf="@id/svFilters" />
 
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottomNav"

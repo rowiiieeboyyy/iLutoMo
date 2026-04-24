@@ -27,46 +27,85 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".SignUpActivity" android:exported="false" />
-        <activity android:name=".HomeActivity" android:exported="false" />
-        <activity android:name=".RecipesActivity" android:exported="false" />
-        <activity android:name=".PantryActivity" android:exported="false" />
-        <activity android:name=".ProfileActivity" android:exported="false" />
-        <activity android:name=".OrdersActivity" android:exported="false" />
-        <activity android:name=".MacrosActivity" android:exported="false" />
-        <activity android:name=".CookingStepsActivity" android:exported="false" />
-        <activity android:name=".GetIngredientsActivity" android:exported="false" />
-        <activity android:name=".DiaryActivity" android:exported="false" />
-        <activity android:name=".EditDiaryActivity" android:exported="false" />
-        <activity android:name=".RecipeDetailsActivity" android:exported="false" />
-        <activity android:name=".OrderConfirmationActivity" android:exported="false" />
-
-        <activity android:name=".BusinessDashboardActivity" android:exported="false" />
-        <activity android:name=".BusinessInventoryActivity" android:exported="false" />
-        <activity android:name=".BusinessOrdersActivity" android:exported="false" />
-        <activity android:name=".BusinessManageActivity" android:exported="false" />
         <activity
-            android:name=".BusinessProfileActivity"
+            android:name=".SignUpActivity"
+            android:exported="false" />
+        <activity
+            android:name=".HomeActivity"
+            android:exported="false" />
+        <activity
+            android:name=".RecipesActivity"
+            android:exported="false" />
+        <activity
+            android:name=".PantryActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ProfileActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ManualActivity"
             android:exported="false"
-            android:windowSoftInputMode="adjustPan" />
+            android:label="User's Manual" />
+        <activity
+            android:name=".OrdersActivity"
+            android:exported="false" />
+        <activity
+            android:name=".MacrosActivity"
+            android:exported="false" />
+        <activity
+            android:name=".CookingStepsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".GetIngredientsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".DiaryActivity"
+            android:exported="false" />
+        <activity
+            android:name=".EditDiaryActivity"
+            android:exported="false" />
+        <activity
+            android:name=".RecipeDetailsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".OrderConfirmationActivity"
+            android:exported="false" />
 
         <activity
             android:name=".EditProfileActivity"
             android:exported="false"
             android:parentActivityName=".ProfileActivity"
-            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar"
             android:screenOrientation="portrait"
+            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar"
             android:windowSoftInputMode="adjustPan">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".ProfileActivity" />
         </activity>
 
+        <activity
+            android:name=".BusinessDashboardActivity"
+            android:exported="false" />
+        <activity
+            android:name=".BusinessInventoryActivity"
+            android:exported="false" />
+        <activity
+            android:name=".BusinessOrdersActivity"
+            android:exported="false" />
+        <activity
+            android:name=".BusinessManageActivity"
+            android:exported="false" />
+        <activity
+            android:name=".BusinessProfileActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustPan" />
+
         <service
             android:name=".LocationService"
-            android:foregroundServiceType="location"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
     </application>
+
 </manifest>

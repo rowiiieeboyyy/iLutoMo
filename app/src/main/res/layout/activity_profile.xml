@@ -81,24 +81,6 @@
                             <CheckBox android:id="@+id/cbOthers" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Others" android:textSize="11sp"/>
                         </GridLayout>
 
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Taste Preferences" android:textColor="#2D5A27" android:textStyle="bold" />
-                        <GridLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:columnCount="2">
-                            <CheckBox android:id="@+id/cbSweet" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Sweet" android:textSize="11sp"/>
-                            <CheckBox android:id="@+id/cbSavory" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Savory" android:textSize="11sp"/>
-                            <CheckBox android:id="@+id/cbSpicy" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Spicy" android:textSize="11sp"/>
-                            <CheckBox android:id="@+id/cbSour" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Sour" android:textSize="11sp"/>
-                        </GridLayout>
-
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Preparation Time" android:textColor="#2D5A27" android:textStyle="bold" />
-                        <RadioGroup
-                            android:id="@+id/rgPrepTime"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical">
-                            <RadioButton android:id="@+id/rbShortPrep" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Short Prep (&lt; 30 mins)" android:textSize="11sp"/>
-                            <RadioButton android:id="@+id/rbLongPrep" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="No Preference / Any" android:textSize="11sp" android:checked="true"/>
-                        </RadioGroup>
-
                         <EditText android:id="@+id/etOtherAllergen" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:hint="Specify others..." android:textSize="12sp" android:visibility="gone" android:background="@android:drawable/editbox_background_normal" android:padding="8dp"/>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
@@ -124,7 +106,7 @@
                         <com.google.android.material.slider.RangeSlider
                             android:id="@+id/rangeBudget"
                             android:layout_width="match_parent" android:layout_height="wrap_content"
-                            android:valueFrom="0" android:valueTo="1000"
+                            android:valueFrom="0" android:valueTo="10000"
                             app:values="@array/initial_range_values" />
 
                         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
@@ -134,7 +116,7 @@
                         <com.google.android.material.slider.RangeSlider
                             android:id="@+id/rangeProtein"
                             android:layout_width="match_parent" android:layout_height="wrap_content"
-                            android:valueFrom="0" android:valueTo="100"
+                            android:valueFrom="0" android:valueTo="1000"
                             app:values="@array/initial_range_values" />
 
                         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
@@ -144,8 +126,8 @@
                         <com.google.android.material.slider.Slider
                             android:id="@+id/rangeCarbs"
                             android:layout_width="match_parent" android:layout_height="wrap_content"
-                            android:valueFrom="0" android:valueTo="100"
-                            android:value="100" />
+                            android:valueFrom="0" android:valueTo="1000"
+                            android:value="1000" />
 
                         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
                             <CheckBox android:id="@+id/checkSugar" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Sugar (Max g)" android:textSize="12sp" android:textColor="#2D5A27" />
@@ -154,8 +136,8 @@
                         <com.google.android.material.slider.Slider
                             android:id="@+id/rangeSugar"
                             android:layout_width="match_parent" android:layout_height="wrap_content"
-                            android:valueFrom="0" android:valueTo="100"
-                            android:value="100" />
+                            android:valueFrom="0" android:valueTo="1000"
+                            android:value="1000" />
 
                         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
                             <CheckBox android:id="@+id/checkCalories" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Calories (Max kcal)" android:textSize="12sp" android:textColor="#2D5A27" />
@@ -164,8 +146,8 @@
                         <com.google.android.material.slider.Slider
                             android:id="@+id/rangeCalories"
                             android:layout_width="match_parent" android:layout_height="wrap_content"
-                            android:valueFrom="0" android:valueTo="2000"
-                            android:value="2000" />
+                            android:valueFrom="0" android:valueTo="10000"
+                            android:value="10000" />
 
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
@@ -214,6 +196,14 @@
                     android:layout_marginTop="8dp" android:backgroundTint="#FFFFFF"
                     android:text="Orders" android:textAllCaps="false" android:textColor="#2D5A27"
                     app:strokeColor="#2D5A27" app:strokeWidth="1dp" app:cornerRadius="15dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnViewManual"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp" android:backgroundTint="#FFFFFF"
+                    android:text="Manual" android:textAllCaps="false" android:textColor="#2D5A27"
+                    app:strokeColor="#2D5A27" app:strokeWidth="1dp" app:cornerRadius="15dp" />
+
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

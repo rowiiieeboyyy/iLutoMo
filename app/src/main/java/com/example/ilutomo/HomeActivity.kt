@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -39,8 +40,10 @@ class HomeActivity : AppCompatActivity() {
     private var customAllergen = ""
     private var searchQuery = ""
 
-    private var maxtotalTime = 0
-    private var selectedTaste = ""
+    private var prefersShortPrepFromProfile = false
+    private var selectedHomepageTaste = ""
+    private var forceShortPrepUI = false
+
     private var budgetMin = 0.0; var budgetMax = 10000.0
     private var proteinMin = 0.0; var proteinMax = 1000.0
     private var carbsMax = 1000.0
@@ -55,12 +58,169 @@ class HomeActivity : AppCompatActivity() {
         setupRecyclerView()
         setupBottomNavigation()
         setupSearch()
+        setupHomepageTasteChips()
 
         binding.btnRecommend.setOnClickListener {
             showIngredientRecommendationDialog()
         }
 
         loadData()
+    }
+
+    private fun setupHomepageTasteChips() {
+        binding.cgTasteFilters.setOnCheckedStateChangeListener { group, checkedIds ->
+            selectedHomepageTaste = ""
+            forceShortPrepUI = false
+            if (checkedIds.isNotEmpty()) {
+                val chip = findViewById<Chip>(checkedIds[0])
+                val chipText = chip.text.toString()
+                if (chipText.contains("Quick")) {
+                    forceShortPrepUI = true
+                } else {
+                    selectedHomepageTaste = chipText.lowercase()
+                }
+            }
+            applyFilters()
+        }
+    }
+
+    private fun loadRecipes() {
+        database.addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                allRecipes.clear()
+                for (child in s.children) {
+                    if (child.key?.startsWith("recipe_") == true) {
+                        try {
+                            val r = child.getValue(Recipe::class.java) ?: continue
+                            r.id = child.key!!
+                            r.totalTime = child.child("totalTime").value?.toString()?.toIntOrNull() ?: 0
+
+                            val tasteMap = mutableMapOf<String, Boolean>()
+                            child.child("tasteProfile").children.forEach { t ->
+                                tasteMap[t.key?.lowercase() ?: ""] = t.value == true
+                            }
+                            r.tasteProfile = tasteMap
+
+                            // --- PRICING & MACRO CALCULATION LOGIC ---
+                            var pro = 0.0; var carb = 0.0; var sug = 0.0; var cal = 0.0
+                            var totalPrice = 0.0
+                            var isMissing = false
+
+                            r.ingredients?.forEach { (name, amt) ->
+                                val lib = ingredientLibrary[name]
+                                if (lib != null) {
+                                    val qty = amt.toString().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 1.0
+                                    val factor = if (name.contains("Egg", true)) qty else (qty / 50.0)
+
+                                    // Macros
+                                    pro += factor * toFilterDouble(lib.child("pro").value, 0.0)
+                                    carb += factor * toFilterDouble(lib.child("carb").value, 0.0)
+                                    sug += factor * toFilterDouble(lib.child("sugar").value, 0.0)
+                                    cal += factor * toFilterDouble(lib.child("cal").value, 0.0)
+
+                                    // Pricing Logic: Check Business Inventory first
+                                    val query = name.lowercase().trim()
+                                    val cheapestItem = businessInventory.filter { inv ->
+                                        inv.stock > 0 && (inv.name.lowercase().contains(query) || inv.ingredient.lowercase().contains(query))
+                                    }.minByOrNull { it.price }
+
+                                    if (cheapestItem != null) {
+                                        totalPrice += cheapestItem.price
+                                    } else {
+                                        // Fallback to library standard price
+                                        isMissing = true
+                                        val stdPrice = toFilterDouble(lib.child("price").value, 0.0)
+                                        totalPrice += (stdPrice * (qty / 100.0))
+                                    }
+                                }
+                            }
+
+                            r.calculatedPrice = totalPrice
+                            r.isMissingIngredients = isMissing
+                            r.calculatedMacros["Protein"] = pro.toInt()
+                            r.calculatedMacros["Carbs"] = carb.toInt()
+                            r.calculatedMacros["Sugar"] = sug.toInt()
+                            r.calculatedMacros["Calories"] = cal.toInt()
+
+                            allRecipes.add(r)
+                        } catch (e: Exception) {
+                            Log.e("RECIPE_LOAD", "Error parsing ${child.key}: ${e.message}")
+                        }
+                    }
+                }
+                applyFilters()
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
+    }
+
+    private fun applyFilters() {
+        filteredList.clear()
+        val isShortPrepActive = forceShortPrepUI || prefersShortPrepFromProfile
+
+        val baseFiltered = allRecipes.filter { r ->
+            if (!isRecipeSafeForUser(r)) return@filter false
+
+            val p = r.calculatedMacros["Protein"]?.toDouble() ?: 0.0
+            val c = r.calculatedMacros["Carbs"]?.toDouble() ?: 0.0
+            val s = r.calculatedMacros["Sugar"]?.toDouble() ?: 0.0
+            val cal = r.calculatedMacros["Calories"]?.toDouble() ?: 0.0
+
+            val matchesBudget = r.calculatedPrice in budgetMin..budgetMax
+            val matchesMacros = (p >= proteinMin && p <= proteinMax) && (c <= carbsMax) && (s <= sugarMax) && (cal <= caloriesMax)
+            val matchesSearch = if (searchQuery.isEmpty()) true else r.title.contains(searchQuery, true)
+            val matchesTime = if (isShortPrepActive) r.totalTime <= 20 else true
+            val matchesTaste = if (selectedHomepageTaste.isNotEmpty()) r.tasteProfile[selectedHomepageTaste] == true else true
+
+            matchesBudget && matchesMacros && matchesSearch && matchesTime && matchesTaste
+        }
+
+        filteredList.addAll(baseFiltered)
+        recipeAdapter.notifyDataSetChanged()
+    }
+
+    // --- REST OF THE METHODS REMAIN THE SAME ---
+
+    private fun fetchPreferences() {
+        val uid = auth.currentUser?.uid ?: return
+        database.child("Users").child(uid).child("Preferences")
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(s: DataSnapshot) {
+                    if (s.exists()) {
+                        userDiet = s.child("dietary_type").value?.toString() ?: "Standard"
+                        budgetMin = toFilterDouble(s.child("budget_min").value, 0.0)
+                        budgetMax = toFilterDouble(s.child("budget_max").value, 10000.0)
+                        proteinMin = toFilterDouble(s.child("protein_min").value, 0.0)
+                        proteinMax = toFilterDouble(s.child("protein_max").value, 1000.0)
+                        carbsMax = toFilterDouble(s.child("carbs_max").value, 1000.0)
+                        sugarMax = toFilterDouble(s.child("sugar_max").value, 1000.0)
+                        caloriesMax = toFilterDouble(s.child("calories_max").value, 10000.0)
+                        prefersShortPrepFromProfile = s.child("prefers_short_prep").value as? Boolean ?: false
+
+                        activeAllergens.clear()
+                        val algNode = s.child("allergens")
+                        if (algNode.child("Soy").value == true) activeAllergens.add("Soy")
+                        if (algNode.child("Gluten").value == true) activeAllergens.add("Gluten")
+                        if (algNode.child("Dairy").value == true) activeAllergens.add("Dairy")
+                        customAllergen = algNode.child("Others_Value").value?.toString()?.lowercase() ?: ""
+                    }
+                    loadRecipes()
+                }
+                override fun onCancelled(e: DatabaseError) {}
+            })
+    }
+
+    private fun isRecipeSafeForUser(recipe: Recipe): Boolean {
+        if (userDiet != "Standard" && !recipe.category.equals(userDiet, ignoreCase = true)) return false
+        val recipeContents = mutableListOf<String>().apply {
+            recipe.ingredients?.keys?.forEach { add(it.lowercase()) }
+            recipe.allergens?.forEach { add(it.lowercase()) }
+        }
+        activeAllergens.forEach { if (recipeContents.any { rc -> rc.contains(it.lowercase()) }) return false }
+        if (customAllergen.isNotBlank() && customAllergen != "null") {
+            if (recipeContents.any { it.contains(customAllergen) }) return false
+        }
+        return true
     }
 
     private fun loadData() {
@@ -74,7 +234,6 @@ class HomeActivity : AppCompatActivity() {
                                 id = inv.key ?: ""
                                 name = inv.child("name").value?.toString() ?: inv.child("itemName").value?.toString() ?: ""
                                 ingredient = inv.child("ingredient").value?.toString() ?: ""
-                                ingredientTag = inv.child("ingredientTag").value?.toString() ?: ""
                                 price = inv.child("price").value?.toString()?.toDoubleOrNull() ?: 0.0
                                 stock = inv.child("stock").value?.toString()?.toIntOrNull() ?: 0
                             }
@@ -129,141 +288,6 @@ class HomeActivity : AppCompatActivity() {
         return if (stringVal.isEmpty()) default else stringVal.toDoubleOrNull() ?: default
     }
 
-    private fun fetchPreferences() {
-        val uid = auth.currentUser?.uid ?: return
-        database.child("Users").child(uid).child("Preferences")
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(s: DataSnapshot) {
-                    if (s.exists()) {
-                        userDiet = s.child("dietary_type").value?.toString() ?: "Standard"
-                        budgetMin = toFilterDouble(s.child("budget_min").value, 0.0)
-                        budgetMax = toFilterDouble(s.child("budget_max").value, 10000.0)
-                        proteinMin = toFilterDouble(s.child("protein_min").value, 0.0)
-                        proteinMax = toFilterDouble(s.child("protein_max").value, 1000.0)
-                        carbsMax = toFilterDouble(s.child("carbs_max").value, 1000.0).let { if (it <= 0) 1000.0 else it }
-                        sugarMax = toFilterDouble(s.child("sugar_max").value, 1000.0).let { if (it <= 0) 1000.0 else it }
-                        caloriesMax = toFilterDouble(s.child("calories_max").value, 10000.0).let { if (it <= 0) 10000.0 else it }
-                        maxtotalTime = s.child("max_total_time").value?.toString()?.toIntOrNull() ?: 0
-
-                        activeAllergens.clear()
-                        val algNode = s.child("allergens")
-                        if (algNode.child("Soy").value == true) activeAllergens.add("Soy")
-                        if (algNode.child("Gluten").value == true) activeAllergens.add("Gluten")
-                        if (algNode.child("Dairy").value == true) activeAllergens.add("Dairy")
-                        customAllergen = algNode.child("Others_Value").value?.toString()?.lowercase() ?: ""
-                    }
-                    loadRecipes()
-                }
-                override fun onCancelled(e: DatabaseError) {}
-            })
-    }
-
-    private fun loadRecipes() {
-        database.addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(s: DataSnapshot) {
-                allRecipes.clear()
-                for (child in s.children) {
-                    if (child.key?.startsWith("recipe_") == true) {
-                        try {
-                            val r = child.getValue(Recipe::class.java) ?: continue
-                            r.id = child.key!!
-
-                            r.totalTime = child.child("totalTime").value?.toString()?.toIntOrNull() ?: 0
-                            val tasteMap = mutableMapOf<String, Boolean>()
-                            child.child("tasteProfile").children.forEach { t ->
-                                tasteMap[t.key ?: ""] = t.value == true
-                            }
-                            r.tasteProfile = tasteMap
-
-                            var pro = 0.0; var carb = 0.0; var sug = 0.0; var cal = 0.0; var sod = 0.0
-                            var totalPrice = 0.0
-                            var isMissingIngredients = false
-
-                            r.ingredients?.forEach { (name, amt) ->
-                                val lib = ingredientLibrary[name]
-                                if (lib != null) {
-                                    val qty = amt.toString().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 1.0
-                                    val factor = if (name.contains("Egg", true)) qty else (qty / 50.0)
-                                    pro += factor * toFilterDouble(lib.child("pro").value, 0.0)
-                                    carb += factor * toFilterDouble(lib.child("carb").value, 0.0)
-                                    sug += factor * toFilterDouble(lib.child("sugar").value, 0.0)
-                                    cal += factor * toFilterDouble(lib.child("cal").value, 0.0)
-                                    sod += factor * toFilterDouble(lib.child("sodium").value, 0.0)
-                                    
-                                    val query = name.lowercase().trim().replace(Regex("[^a-z0-9 ]"), " ")
-                                    val queryWords = query.split(" ").map { it.removeSuffix("s") }.filter { it.isNotBlank() }
-                                    
-                                    val cheapestStoreItem = businessInventory.filter { inv ->
-                                        if (inv.stock <= 0 || inv.price <= 0) return@filter false
-                                        val itemName = inv.name.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
-                                        val itemIng = inv.ingredient.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
-                                        itemName.trim() == query || itemIng.trim() == query || 
-                                        queryWords.any { qWord -> (itemName + " " + itemIng).contains(qWord) }
-                                    }.minByOrNull { it.price }
-                                    
-                                    if (cheapestStoreItem != null) {
-                                        totalPrice += cheapestStoreItem.price
-                                    } else {
-                                        isMissingIngredients = true
-                                        val standardPrice = toFilterDouble(lib.child("price").value, 0.0)
-                                        totalPrice += (standardPrice * (qty / 100.0))
-                                    }
-                                }
-                            }
-                            
-                            r.calculatedPrice = totalPrice
-                            r.isMissingIngredients = isMissingIngredients
-                            r.calculatedMacros["Protein"] = pro.toInt()
-                            r.calculatedMacros["Carbs"] = carb.toInt()
-                            r.calculatedMacros["Sugar"] = sug.toInt()
-                            r.calculatedMacros["Calories"] = cal.toInt()
-                            r.calculatedMacros["Sodium"] = sod.toInt()
-
-                            allRecipes.add(r)
-                        } catch (e: Exception) {
-                            Log.e("RECIPE_LOAD", "Error parsing ${child.key}: ${e.message}")
-                        }
-                    }
-                }
-                applyFilters()
-            }
-            override fun onCancelled(e: DatabaseError) {}
-        })
-    }
-
-    private fun applyFilters() {
-        filteredList.clear()
-        val baseFiltered = allRecipes.filter { r ->
-            if (!isRecipeSafeForUser(r)) return@filter false
-            val p = r.calculatedMacros["Protein"]?.toDouble() ?: 0.0
-            val c = r.calculatedMacros["Carbs"]?.toDouble() ?: 0.0
-            val s = r.calculatedMacros["Sugar"]?.toDouble() ?: 0.0
-            val cal = r.calculatedMacros["Calories"]?.toDouble() ?: 0.0
-            val matchesBudget = r.calculatedPrice in budgetMin..budgetMax
-            val matchesMacros = (p >= proteinMin && p <= proteinMax) && (c <= carbsMax) && (s <= sugarMax) && (cal <= caloriesMax)
-            val matchesSearch = if (searchQuery.isEmpty()) true else r.title.contains(searchQuery, true)
-            val matchestotalTime = if (maxtotalTime > 0) r.totalTime <= maxtotalTime else true
-            val matchesTaste = if (selectedTaste.isNotEmpty()) r.tasteProfile[selectedTaste.lowercase()] == true else true
-            r.matchScore = 0.0
-            matchesBudget && matchesMacros && matchesSearch && matchestotalTime && matchesTaste
-        }
-        filteredList.addAll(baseFiltered)
-        recipeAdapter.notifyDataSetChanged()
-    }
-
-    private fun isRecipeSafeForUser(recipe: Recipe): Boolean {
-        if (userDiet != "Standard" && !recipe.category.equals(userDiet, ignoreCase = true)) return false
-        val recipeContents = mutableListOf<String>().apply {
-            recipe.ingredients?.keys?.forEach { add(it.lowercase()) }
-            recipe.allergens?.forEach { add(it.lowercase()) }
-        }
-        activeAllergens.forEach { if (recipeContents.any { rc -> rc.contains(it.lowercase()) }) return false }
-        if (customAllergen.isNotBlank() && customAllergen != "null") {
-            if (recipeContents.any { it.contains(customAllergen) }) return false
-        }
-        return true
-    }
-
     private fun setupSearch() {
         binding.searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(q: String?): Boolean = false
@@ -293,7 +317,11 @@ class HomeActivity : AppCompatActivity() {
                 R.id.nav_profile -> Intent(this, ProfileActivity::class.java)
                 else -> null
             }
-            intent?.let { startActivity(it); overridePendingTransition(0,0); finish() }
+            intent?.let {
+                it.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                startActivity(it)
+                overridePendingTransition(0,0)
+            }
             true
         }
     }
@@ -328,10 +356,7 @@ class HomeActivity : AppCompatActivity() {
         val chip = Chip(this)
         chip.text = text
         chip.isCloseIconVisible = true
-        chip.setOnCloseIconClickListener {
-            chipGroup.removeView(chip)
-            currentFridgeIngredients.remove(text)
-        }
+        chip.setOnCloseIconClickListener { chipGroup.removeView(chip); currentFridgeIngredients.remove(text) }
         chipGroup.addView(chip)
     }
 
@@ -342,8 +367,7 @@ class HomeActivity : AppCompatActivity() {
             val matchCount = recipeIngredients.count { rIng ->
                 searchItems.any { sIng -> rIng.contains(sIng) || sIng.contains(rIng) }
             }
-            val percentage = if (recipeIngredients.isNotEmpty()) (matchCount.toDouble() / recipeIngredients.size) * 100 else 0.0
-            recipe.matchScore = percentage
+            recipe.matchScore = if (recipeIngredients.isNotEmpty()) (matchCount.toDouble() / recipeIngredients.size) * 100 else 0.0
             recipe
         }.filter { it.matchScore > 0 }.sortedByDescending { it.matchScore }
         filteredList.clear()
