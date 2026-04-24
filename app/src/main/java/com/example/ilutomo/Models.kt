@@ -30,6 +30,9 @@ data class Recipe(
     // Excluded from Firebase: UI/Calculation results
     @get:Exclude
     var calculatedPrice: Double = 0.0,
+    
+    @get:Exclude
+    var isMissingIngredients: Boolean = false,
 
     // For the "Detailed Nutrition" breakdown
     @get:Exclude

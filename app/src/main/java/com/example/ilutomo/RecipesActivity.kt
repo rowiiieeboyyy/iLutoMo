@@ -18,6 +18,7 @@ import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import java.util.Locale
+import kotlin.math.*
 
 class RecipesActivity : AppCompatActivity() {
 
@@ -29,6 +30,7 @@ class RecipesActivity : AppCompatActivity() {
     private var currentIngredients = mutableListOf<DisplayIngredient>()
     private var currentRecipe: Recipe? = null
     private val ingredientLibrary = mutableMapOf<String, Map<String, Double>>()
+    private val allStoreItems = mutableListOf<InventoryItem>()
 
     private val auth = FirebaseAuth.getInstance()
     private val database = FirebaseDatabase.getInstance().reference
@@ -51,7 +53,8 @@ class RecipesActivity : AppCompatActivity() {
         val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNav)
 
         rvAvailable.layoutManager = LinearLayoutManager(this)
-        loadIngredientLibrary()
+        
+        loadData()
 
         btnPlus.setOnClickListener {
             currentRecipe?.let {
@@ -94,95 +97,32 @@ class RecipesActivity : AppCompatActivity() {
         btnAddToPantry.setOnClickListener { addToPantry() }
     }
 
-    // --- RANKING LOGIC START ---
-
-    private fun calculateMatchScore(recipe: Recipe, userProfile: UserProfile): Double {
-        var score = 0.0
-
-        // 1. Taste Matching (+10 per match)
-        userProfile.preferredTastes.forEach { taste ->
-            if (recipe.tasteProfile[taste.lowercase()] == true) {
-                score += 10.0
-            }
-        }
-
-        // 2. UPDATED: totalTime Matching (+15 if short prep preferred and recipe is fast)
-        // Changed from prepTime to totalTime
-        if (userProfile.prefersShortPrep && recipe.totalTime <= 30 && recipe.totalTime > 0) {
-            score += 15.0
-        }
-
-        // 3. Allergen Safety (Severe penalty if recipe contains user's allergen)
-        userProfile.allergens.forEach { allergen ->
-            if (recipe.allergens?.contains(allergen) == true) {
-                score -= 100.0
-            }
-        }
-
-        return score
-    }
-
-    private fun showAllRecipesDiscovery(btnChoose: Button) {
-        val uid = auth.currentUser?.uid ?: return
-
-        database.child("Users").child(uid).child("Preferences").get().addOnSuccessListener { prefSnap ->
-            val userProfile = UserProfile()
-            if (prefSnap.exists()) {
-                userProfile.preferredTastes = prefSnap.child("preferred_tastes").children.map { it.value.toString() }
-                userProfile.prefersShortPrep = prefSnap.child("prefers_short_prep").value as? Boolean ?: false
-
-                val algSnap = prefSnap.child("allergens")
-                val activeAllergens = mutableListOf<String>()
-                if (algSnap.child("Soy").value == true) activeAllergens.add("Soy")
-                if (algSnap.child("Gluten").value == true) activeAllergens.add("Gluten")
-                if (algSnap.child("Dairy").value == true) activeAllergens.add("Dairy")
-                userProfile.allergens = activeAllergens
-            }
-
-            database.child("Users").child(uid).child("AddedRecipes").get().addOnSuccessListener { recipeSnap ->
-                val rankedRecipes = mutableListOf<Recipe>()
-                for (snap in recipeSnap.children) {
-                    val recipe = snap.getValue(Recipe::class.java) ?: continue
-                    recipe.id = snap.key ?: ""
-
-                    // Manually ensure totalTime is read if not mapped correctly by getValue
-                    if (recipe.totalTime == 0) {
-                        recipe.totalTime = snap.child("totalTime").value?.toString()?.toIntOrNull() ?: 0
+    private fun loadData() {
+        // Load Store Inventory
+        database.child("Businesses").addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                allStoreItems.clear()
+                for (bizSnapshot in snapshot.children) {
+                    bizSnapshot.child("inventory").children.forEach { itemSnap ->
+                        try {
+                            val itm = InventoryItem().apply {
+                                id = itemSnap.key ?: ""
+                                name = itemSnap.child("name").value?.toString() ?: itemSnap.child("itemName").value?.toString() ?: ""
+                                ingredient = itemSnap.child("ingredient").value?.toString() ?: ""
+                                ingredientTag = itemSnap.child("ingredientTag").value?.toString() ?: ""
+                                price = itemSnap.child("price").value?.toString()?.toDoubleOrNull() ?: 0.0
+                                stock = itemSnap.child("stock").value?.toString()?.toIntOrNull() ?: 0
+                                size = itemSnap.child("size").value?.toString() ?: ""
+                            }
+                            allStoreItems.add(itm)
+                        } catch (e: Exception) {}
                     }
-
-                    recipe.matchScore = calculateMatchScore(recipe, userProfile)
-                    rankedRecipes.add(recipe)
                 }
-
-                if (rankedRecipes.isEmpty()) {
-                    Toast.makeText(this, "No recipes in your list!", Toast.LENGTH_LONG).show()
-                    return@addOnSuccessListener
-                }
-
-                rankedRecipes.sortByDescending { it.matchScore }
-
-                val titlesWithScores = rankedRecipes.map {
-                    if (it.matchScore > 0) "${it.title} (Match: ${it.matchScore.toInt()}pts)"
-                    else it.title
-                }.toTypedArray()
-
-                AlertDialog.Builder(this)
-                    .setTitle("Recommended for You")
-                    .setItems(titlesWithScores) { _, which ->
-                        val selected = rankedRecipes[which]
-                        currentRecipe = selected
-                        btnChoose.text = selected.title
-                        tvServings.text = selected.servings.toString()
-                        loadRecipeDataIntoUI(selected)
-                    }
-                    .setNeutralButton("Delete") { _, _ -> showDeleteRecipeDialog(rankedRecipes, btnChoose) }
-                    .setNegativeButton("Cancel", null)
-                    .show()
+                loadIngredientLibrary()
             }
-        }
+            override fun onCancelled(error: DatabaseError) {}
+        })
     }
-
-    // --- RANKING LOGIC END ---
 
     private fun loadIngredientLibrary() {
         database.child("ingredient_library").addValueEventListener(object : ValueEventListener {
@@ -193,10 +133,74 @@ class RecipesActivity : AppCompatActivity() {
                     ingredientLibrary[data.key!!] = stats
                 }
             }
-            override fun onCancelled(error: DatabaseError) {
-                Log.e("RecipesActivity", "Error loading library: ${error.message}")
-            }
+            override fun onCancelled(error: DatabaseError) {}
         })
+    }
+
+    private fun findCheapestMatch(ingredientName: String): InventoryItem? {
+        val queryClean = ingredientName.lowercase().trim().replace(Regex("[^a-z0-9 ]"), " ")
+        val queryWords = queryClean.split(" ").map { it.removeSuffix("s") }.filter { it.isNotBlank() }
+        
+        val scoredItems = allStoreItems.mapNotNull { item ->
+            if (item.stock <= 0 || item.price <= 0) return@mapNotNull null
+            val itemName = item.name.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
+            val itemIng = item.ingredient.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
+            val combined = "$itemName $itemIng"
+            
+            var score = 0
+            if (itemName.trim() == queryClean || itemIng.trim() == queryClean) {
+                score = 1000
+            } else {
+                val matchCount = queryWords.count { qWord -> combined.contains(qWord) }
+                if (matchCount == 0) return@mapNotNull null
+                score = matchCount
+            }
+            item to score
+        }
+        if (scoredItems.isEmpty()) return null
+        val maxScore = scoredItems.maxOf { it.second }
+        return scoredItems.filter { it.second == maxScore }.map { it.first }.minByOrNull { it.price }
+    }
+
+    private fun extractNumericValue(input: String): Double {
+        val numberRegex = "([0-9]*\\.?[0-9]+)".toRegex()
+        return numberRegex.find(input)?.value?.toDoubleOrNull() ?: 0.0
+    }
+
+    private fun calculateOrderCount(requiredPerServing: String, itemSize: String, multiplier: Int): Int {
+        val reqValue = extractNumericValue(requiredPerServing)
+        val sizeValue = extractNumericValue(itemSize)
+        if (sizeValue <= 0 || reqValue <= 0) return multiplier
+        return ceil((reqValue * multiplier) / sizeValue).toInt().coerceAtLeast(1)
+    }
+
+    private fun showAllRecipesDiscovery(btnChoose: Button) {
+        val uid = auth.currentUser?.uid ?: return
+        database.child("Users").child(uid).child("AddedRecipes").get().addOnSuccessListener { recipeSnap ->
+            val rankedRecipes = mutableListOf<Recipe>()
+            for (snap in recipeSnap.children) {
+                val recipe = snap.getValue(Recipe::class.java) ?: continue
+                recipe.id = snap.key ?: ""
+                rankedRecipes.add(recipe)
+            }
+            if (rankedRecipes.isEmpty()) {
+                Toast.makeText(this, "No recipes in your list!", Toast.LENGTH_LONG).show()
+                return@addOnSuccessListener
+            }
+            val titles = rankedRecipes.map { it.title }.toTypedArray()
+            AlertDialog.Builder(this)
+                .setTitle("Select Recipe")
+                .setItems(titles) { _, which ->
+                    val selected = rankedRecipes[which]
+                    currentRecipe = selected
+                    btnChoose.text = selected.title
+                    tvServings.text = selected.servings.toString()
+                    loadRecipeDataIntoUI(selected)
+                }
+                .setNeutralButton("Delete") { _, _ -> showDeleteRecipeDialog(rankedRecipes, btnChoose) }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
     }
 
     private fun showDeleteRecipeDialog(recipes: List<Recipe>, btnChoose: Button) {
@@ -244,34 +248,45 @@ class RecipesActivity : AppCompatActivity() {
         val recipe = currentRecipe ?: return
         val multiplier = recipe.servings
         val fullText = StringBuilder()
-        var calculatedTotalPrice = 0.0
+        var estimatedTotalPrice = 0.0
 
         currentIngredients.forEach { ing ->
             val scaledAmount = scaleAmount(ing.amount, multiplier)
-            fullText.append("${ing.name} ($scaledAmount)\n\n")
-
-            if (ing.isChecked) {
-                val cleanName = ing.name.split("(")[0].trim()
-                val entry = ingredientLibrary.entries.find { it.key.equals(cleanName, true) }?.value
-                if (entry != null) {
-                    val qtyNumeric = (ing.amount.replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0)
-                    val scaledQty = qtyNumeric * multiplier
-                    val standardPrice = entry["price"] ?: 0.0
-                    calculatedTotalPrice += standardPrice * (scaledQty / 100.0)
-                }
+            
+            val cheapestItem = findCheapestMatch(ing.name)
+            val priceText: String
+            
+            if (cheapestItem != null) {
+                val orderCount = calculateOrderCount(ing.amount, cheapestItem.size, multiplier)
+                val cost = cheapestItem.price * orderCount
+                priceText = " - ₱${String.format("%.2f", cost)} (${cheapestItem.name})"
+                if (ing.isChecked) estimatedTotalPrice += cost
+            } else {
+                priceText = " - Not Available"
             }
+            
+            fullText.append("${ing.name} ($scaledAmount)$priceText\n\n")
         }
 
-        tvDetailPrice.text = "Total Price: ₱${"%.2f".format(calculatedTotalPrice)}"
+        tvDetailPrice.text = "Total Price: ₱${String.format("%.2f", estimatedTotalPrice)}"
 
         val spannable = SpannableString(fullText.toString())
         var currentPos = 0
         currentIngredients.forEach { ing ->
             val scaledAmount = scaleAmount(ing.amount, multiplier)
-            val segment = "${ing.name} ($scaledAmount)\n\n"
+            val cheapestItem = findCheapestMatch(ing.name)
+            val priceText = if (cheapestItem != null) {
+                val orderCount = calculateOrderCount(ing.amount, cheapestItem.size, multiplier)
+                " - ₱${String.format("%.2f", cheapestItem.price * orderCount)} (${cheapestItem.name})"
+            } else " - Not Available"
+            
+            val segment = "${ing.name} ($scaledAmount)$priceText\n\n"
+            
             if (!ing.isChecked) {
                 spannable.setSpan(StrikethroughSpan(), currentPos, currentPos + ing.name.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 spannable.setSpan(ForegroundColorSpan(Color.GRAY), currentPos, currentPos + ing.name.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            } else if (cheapestItem == null) {
+                spannable.setSpan(ForegroundColorSpan(Color.RED), currentPos, currentPos + segment.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
             currentPos += segment.length
         }
@@ -292,16 +307,13 @@ class RecipesActivity : AppCompatActivity() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_custom_info, null)
         val dialog = AlertDialog.Builder(this).setView(dialogView).create()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
         val tvTitle = dialogView.findViewById<TextView>(R.id.dialogTitle)
         val tvContent = dialogView.findViewById<TextView>(R.id.dialogContent)
         val tvTotal = dialogView.findViewById<TextView>(R.id.tvTotalValue)
         val llTotal = dialogView.findViewById<LinearLayout>(R.id.llTotalSection)
         val btnCloseX = dialogView.findViewById<ImageButton>(R.id.btnCloseDialog)
-
         tvTitle.text = "Detailed Nutrition"
         llTotal.visibility = View.VISIBLE
-
         val contentBuilder = StringBuilder()
         val multiplier = recipe.servings
         var totalCals = 0.0; var totalCarbs = 0.0; var totalProt = 0.0; var totalPrice = 0.0
@@ -310,28 +322,29 @@ class RecipesActivity : AppCompatActivity() {
             val cleanName = fullName.split("(")[0].trim()
             val qtyNumeric = (amount.toString().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0)
             val scaledQty = qtyNumeric * multiplier
-
             val entry = ingredientLibrary.entries.find { it.key.equals(cleanName, true) }?.value
+            val cheapestItem = findCheapestMatch(fullName)
 
             if (entry != null) {
                 val factor = if (cleanName.contains("Egg", true)) scaledQty else (scaledQty / 50.0)
                 val kcal = factor * (entry["cal"] ?: 0.0)
                 val carbs = factor * (entry["carb"] ?: 0.0)
                 val prot = factor * (entry["pro"] ?: 0.0)
-
-                val standardPrice = entry["price"] ?: 0.0
-                val individualPrice = standardPrice * (scaledQty / 100.0)
-
-                totalCals += kcal; totalCarbs += carbs; totalProt += prot; totalPrice += individualPrice
-
+                totalCals += kcal; totalCarbs += carbs; totalProt += prot
+                
                 contentBuilder.append("• $fullName (${scaleAmount(amount.toString(), multiplier)})\n")
-                contentBuilder.append("   ₱${"%.2f".format(individualPrice)} | ${kcal.toInt()} kcal | P: ${prot.toInt()}g\n\n")
+                if (cheapestItem != null) {
+                    val orderCount = calculateOrderCount(amount.toString(), cheapestItem.size, multiplier)
+                    val cost = cheapestItem.price * orderCount
+                    totalPrice += cost
+                    contentBuilder.append("   ₱${String.format("%.2f", cost)} | ${kcal.toInt()} kcal | P: ${prot.toInt()}g\n\n")
+                } else {
+                    contentBuilder.append("   Not Available | ${kcal.toInt()} kcal | P: ${prot.toInt()}g\n\n")
+                }
             }
         }
-
         tvContent.text = contentBuilder.toString().trim()
-        tvTotal.text = "Total: ${totalCals.toInt()} kcal | ₱${"%.2f".format(totalPrice)}\nP: ${totalProt.toInt()}g | C: ${totalCarbs.toInt()}g"
-
+        tvTotal.text = "Total: ${totalCals.toInt()} kcal | ₱${String.format("%.2f", totalPrice)}\nP: ${totalProt.toInt()}g | C: ${totalCarbs.toInt()}g"
         btnCloseX.setOnClickListener { dialog.dismiss() }
         dialog.show()
     }
@@ -340,18 +353,14 @@ class RecipesActivity : AppCompatActivity() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_custom_info, null)
         val dialog = AlertDialog.Builder(this).setView(dialogView).create()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
         val tvTitle = dialogView.findViewById<TextView>(R.id.dialogTitle)
         val tvContent = dialogView.findViewById<TextView>(R.id.dialogContent)
         val llTotal = dialogView.findViewById<LinearLayout>(R.id.llTotalSection)
         val btnCloseX = dialogView.findViewById<ImageButton>(R.id.btnCloseDialog)
-
         tvTitle.text = "${recipe.title} - Steps"
         llTotal.visibility = View.GONE
-
         val steps = recipe.steps?.mapIndexed { i, s -> "${i + 1}. $s" }?.joinToString("\n\n") ?: "No steps available."
         tvContent.text = steps
-
         btnCloseX.setOnClickListener { dialog.dismiss() }
         dialog.show()
     }
@@ -369,28 +378,26 @@ class RecipesActivity : AppCompatActivity() {
 
         val pantryRef = database.child("Users").child(uid).child("Pantry")
         selected.forEach { ing ->
+            val cheapestItem = findCheapestMatch(ing.name)
             val key = pantryRef.push().key ?: return@forEach
 
-            val cleanName = ing.name.split("(")[0].trim()
-            val entry = ingredientLibrary.entries.find { it.key.equals(cleanName, true) }?.value
-            val qtyNumeric = (ing.amount.replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 1.0)
-            val scaledQty = qtyNumeric * multiplier
-
-            val standardPrice = entry?.get("price") ?: 0.0
-            val calculatedPrice = standardPrice * (scaledQty / 100.0)
+            val orderCount = if (cheapestItem != null) calculateOrderCount(ing.amount, cheapestItem.size, multiplier) else multiplier
+            val linePrice = if (cheapestItem != null) cheapestItem.price * orderCount else 0.0
 
             val item = mapOf(
                 "id" to key,
-                "name" to ing.name,
+                "name" to (cheapestItem?.name ?: ing.name),
                 "amount" to scaleAmount(ing.amount, multiplier),
                 "recipeTitle" to recipe.title,
                 "isChecked" to true,
-                "count" to multiplier,
-                "price" to calculatedPrice
+                "count" to orderCount,
+                "price" to linePrice,
+                "imageUrl" to (cheapestItem?.img ?: ""),
+                "ingredientTag" to (cheapestItem?.ingredient ?: ing.name)
             )
             pantryRef.child(key).setValue(item)
         }
-        Toast.makeText(this, "Added to Pantry for $multiplier servings!", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Added to Pantry!", Toast.LENGTH_SHORT).show()
         startActivity(Intent(this, PantryActivity::class.java))
     }
 }

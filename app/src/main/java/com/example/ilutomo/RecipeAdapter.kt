@@ -1,19 +1,45 @@
 package com.example.ilutomo
 
 import android.content.Intent
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.*
 import java.util.Locale
 
 class RecipeAdapter(
     private var recipes: List<Recipe>,
     private val onAddClick: (Recipe) -> Unit
 ) : RecyclerView.Adapter<RecipeAdapter.RecipeViewHolder>() {
+
+    private val auth = FirebaseAuth.getInstance()
+    private val database = FirebaseDatabase.getInstance().reference
+    private val savedRecipeIds = mutableSetOf<String>()
+
+    init {
+        fetchSavedRecipes()
+    }
+
+    private fun fetchSavedRecipes() {
+        val uid = auth.currentUser?.uid ?: return
+        database.child("Users").child(uid).child("AddedRecipes").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                savedRecipeIds.clear()
+                for (child in snapshot.children) {
+                    savedRecipeIds.add(child.key ?: "")
+                }
+                notifyDataSetChanged()
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        })
+    }
 
     class RecipeViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val img: ImageView = view.findViewById(R.id.idRecipeImg)
@@ -28,6 +54,7 @@ class RecipeAdapter(
         val btnPlus: ImageButton = view.findViewById(R.id.btnHomePlus)
         val btnMinus: ImageButton = view.findViewById(R.id.btnHomeMinus)
         val tvPrice: TextView? = view.findViewById(R.id.tvRecipePrice)
+        val tvIncomplete: TextView? = view.findViewById(R.id.tvIncompleteWarning)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecipeViewHolder {
@@ -59,22 +86,50 @@ class RecipeAdapter(
             }
         }
 
-        // REMOVED TOTAL PRICE DISPLAY on the Home Page card
-        holder.tvPrice?.visibility = View.GONE
+        // DISPLAY TOTAL ESTIMATED PRICE
+        holder.tvPrice?.let {
+            it.visibility = View.VISIBLE
+            val total = recipe.calculatedPrice * multiplier
+            it.text = "₱${String.format(Locale.getDefault(), "%.2f", total)}"
+        }
 
-        // Macros calculation
+        // --- INCOMPLETE WARNING ---
+        holder.tvIncomplete?.let {
+            it.visibility = if (recipe.isMissingIngredients) View.VISIBLE else View.GONE
+        }
+
         val p = (recipe.calculatedMacros["Protein"] ?: 0) * multiplier
         val s = (recipe.calculatedMacros["Sugar"] ?: 0) * multiplier
         val c = (recipe.calculatedMacros["Carbs"] ?: 0) * multiplier
         val cal = (recipe.calculatedMacros["Calories"] ?: 0) * multiplier
         holder.macros.text = "P: ${p}g | S: ${s}g | C: ${c}g | ${cal} kcal"
 
-        // Image loading
         val context = holder.itemView.context
         val resId = context.resources.getIdentifier(recipe.imageResourceName, "drawable", context.packageName)
         holder.img.setImageResource(if (resId != 0) resId else android.R.drawable.ic_menu_gallery)
 
-        // Listeners
+        val isSaved = savedRecipeIds.contains(recipe.id)
+        
+        // FIXED: Using material checkmark icon instead of standard indicator
+        if (isSaved) {
+            holder.btnAdd.setImageResource(android.R.drawable.checkbox_on_background)
+            holder.btnAdd.setColorFilter(Color.parseColor("#4CAF50")) // Nice Green
+        } else {
+            holder.btnAdd.setImageResource(android.R.drawable.ic_input_add)
+            holder.btnAdd.setColorFilter(null)
+        }
+        holder.btnAdd.setBackgroundColor(Color.TRANSPARENT)
+        
+        holder.btnAdd.setOnClickListener {
+            val uid = auth.currentUser?.uid ?: return@setOnClickListener
+            val ref = database.child("Users").child(uid).child("AddedRecipes").child(recipe.id)
+            if (isSaved) {
+                ref.removeValue().addOnSuccessListener { Toast.makeText(context, "Removed from Recipes", Toast.LENGTH_SHORT).show() }
+            } else {
+                ref.setValue(recipe).addOnSuccessListener { Toast.makeText(context, "Saved to Recipes", Toast.LENGTH_SHORT).show() }
+            }
+        }
+
         holder.btnPlus.setOnClickListener {
             recipe.servings++
             notifyItemChanged(position)
@@ -85,7 +140,6 @@ class RecipeAdapter(
                 notifyItemChanged(position)
             }
         }
-        holder.btnAdd.setOnClickListener { onAddClick(recipe) }
         holder.itemView.setOnClickListener {
             val intent = Intent(context, RecipeDetailsActivity::class.java)
             intent.putExtra("RECIPE", recipe)

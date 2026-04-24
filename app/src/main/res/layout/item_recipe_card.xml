@@ -91,6 +91,17 @@
             android:textSize="14sp"
             android:textStyle="bold" />
 
+        <TextView
+            android:id="@+id/tvIncompleteWarning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="⚠️ Incomplete Ingredients"
+            android:textColor="#F44336"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
