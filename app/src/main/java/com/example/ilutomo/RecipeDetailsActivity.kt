@@ -11,7 +11,6 @@ import androidx.appcompat.app.AppCompatActivity
 import com.example.ilutomo.databinding.ActivityRecipeDetailsBinding
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
-import com.google.firebase.firestore.FirebaseFirestore
 import java.util.Locale
 import kotlin.math.*
 
@@ -75,13 +74,13 @@ class RecipeDetailsActivity : AppCompatActivity() {
                             try {
                                 val itm = InventoryItem().apply {
                                     id = itemSnap.key ?: ""
-                                    name = itemSnap.child("name").value?.toString() 
+                                    name = itemSnap.child("name").value?.toString()
                                         ?: itemSnap.child("itemName").value?.toString() ?: ""
                                     ingredient = itemSnap.child("ingredient").value?.toString() ?: ""
                                     ingredientTag = itemSnap.child("ingredientTag").value?.toString() ?: ""
                                     itemGrade = itemSnap.child("itemGrade").value?.toString() ?: "Budget"
                                     size = itemSnap.child("size").value?.toString() ?: ""
-                                    img = itemSnap.child("img").value?.toString() 
+                                    img = itemSnap.child("img").value?.toString()
                                         ?: itemSnap.child("imageUrl").value?.toString() ?: ""
                                     price = itemSnap.child("price").value?.toString()?.toDoubleOrNull() ?: 0.0
                                     stock = itemSnap.child("stock").value?.toString()?.toIntOrNull() ?: 0
@@ -104,18 +103,18 @@ class RecipeDetailsActivity : AppCompatActivity() {
     private fun findCheapestMatch(ingredientName: String): InventoryItem? {
         val queryClean = ingredientName.lowercase().trim().replace(Regex("[^a-z0-9 ]"), " ")
         val queryWords = queryClean.split(" ").map { it.removeSuffix("s") }.filter { it.isNotBlank() }
-        
+
         if (queryWords.isEmpty()) return null
 
         val scoredItems = allStoreItems.mapNotNull { item ->
             if (item.stock <= 0 || item.price <= 0) return@mapNotNull null
-            
+
             val itemName = item.name.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
             val itemIng = item.ingredient.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
             val itemTag = item.ingredientTag.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
-            
+
             val combined = "$itemName $itemIng $itemTag"
-            
+
             var score = 0
             if (itemName.trim() == queryClean || itemIng.trim() == queryClean) {
                 score = 1000
@@ -124,7 +123,7 @@ class RecipeDetailsActivity : AppCompatActivity() {
                 if (matchCount == 0) return@mapNotNull null
                 score = matchCount
             }
-            
+
             item to score
         }
 
@@ -142,6 +141,16 @@ class RecipeDetailsActivity : AppCompatActivity() {
         binding.tvDetailDescription.text = recipe.description
         binding.tvDetailServings.text = multiplier.toString()
 
+        // Match your XML IDs: tvDetailPrepTime and tvDetailTags
+        binding.tvDetailPrepTime.text = "🕒 ${recipe.totalTime} mins"
+
+        val activeTags = recipe.tasteProfile.filter { it.value }.keys
+        binding.tvDetailTags.text = if (activeTags.isNotEmpty()) {
+            "🏷️ ${activeTags.joinToString(", ")}"
+        } else {
+            "🏷️ ${recipe.category}"
+        }
+
         val imageResId = resources.getIdentifier(recipe.imageResourceName, "drawable", packageName)
         binding.ivRecipeDetailImage.setImageResource(if (imageResId != 0) imageResId else R.drawable.placeholder_food)
 
@@ -158,14 +167,14 @@ class RecipeDetailsActivity : AppCompatActivity() {
         recipe.ingredients?.forEach { (name, rawAmount) ->
             val amountStr = rawAmount.toString()
             val scaledAmount = scaleAmount(amountStr, multiplier)
-            
+
             val cheapestItem = findCheapestMatch(name)
 
             val priceText: String
             if (cheapestItem != null) {
                 val orderCount = calculateOrderCount(amountStr, cheapestItem.size, multiplier)
                 val cost = cheapestItem.price * orderCount
-                
+
                 val quantityText = if (orderCount > 1) " (x$orderCount)" else ""
                 priceText = " - ₱${String.format("%.2f", cost)} (${cheapestItem.name})$quantityText"
                 estimatedTotalPrice += cost
@@ -220,14 +229,11 @@ class RecipeDetailsActivity : AppCompatActivity() {
 
         pantryRef.get().addOnSuccessListener { snapshot ->
             val updates = mutableMapOf<String, Any?>()
-            
-            // Map current pantry items for grouping
+
             val currentPantryItems = mutableMapOf<String, PantryIngredient>()
             snapshot.children.forEach { child ->
-                child.getValue(PantryIngredient::class.java)?.let { 
+                child.getValue(PantryIngredient::class.java)?.let {
                     it.id = child.key ?: ""
-                    // CRITICAL FIX: Normalize lookup key using ONLY the base ingredient tag.
-                    // This ensures "Garlic (Brand A)" and "Garlic (Brand B)" are recognized as the same ingredient category.
                     val tag = it.ingredientTag.lowercase().trim()
                     if (tag.isNotEmpty()) {
                         currentPantryItems[tag] = it
@@ -238,54 +244,45 @@ class RecipeDetailsActivity : AppCompatActivity() {
             recipe.ingredients?.forEach { (name, amount) ->
                 val cheapestItem = findCheapestMatch(name) ?: return@forEach
                 val amountStr = amount.toString()
-                
-                // standardTag must match the tag used when building currentPantryItems
+
                 val standardTag = cheapestItem.ingredient.lowercase().trim()
                 val existing = currentPantryItems[standardTag]
 
                 if (existing != null) {
                     val unitSize = extractNumericValue(existing.size)
-                    if (unitSize <= 0) return@forEach 
+                    if (unitSize <= 0) return@forEach
 
                     val totalVolumePurchased = unitSize * existing.count
                     val volumeAlreadyNeeded = extractNumericValue(existing.amount)
                     val volumeAvailable = (totalVolumePurchased - volumeAlreadyNeeded).coerceAtLeast(0.0)
-                    
+
                     val volumeNeededNow = extractNumericValue(amountStr) * multiplier
-                    
+
                     if (volumeAvailable >= volumeNeededNow) {
-                        // Already fits! Just update the descriptive 'amount' tracker. 
-                        // No need to increase 'count' or 'price'.
                         val newTotalAmount = volumeAlreadyNeeded + volumeNeededNow
                         val unit = extractUnit(existing.amount)
                         updates["${existing.id}/amount"] = "${newTotalAmount.toInt()}${unit}"
-                        
-                        Log.d("ALGO", "Item $name re-used from existing pantry stock. Remaining: ${volumeAvailable - volumeNeededNow}")
                     } else {
-                        // Doesn't fit, calculate how many MORE full packs are needed
                         val gap = volumeNeededNow - volumeAvailable
                         val extraPacks = ceil(gap / unitSize).toInt().coerceAtLeast(1)
-                        
+
                         val newCount = existing.count + extraPacks
                         val newPrice = existing.price + (cheapestItem.price * extraPacks)
                         val newTotalAmount = volumeAlreadyNeeded + volumeNeededNow
                         val unit = extractUnit(existing.amount)
-                        
+
                         updates["${existing.id}/count"] = newCount
                         updates["${existing.id}/price"] = newPrice
                         updates["${existing.id}/amount"] = "${newTotalAmount.toInt()}${unit}"
-                        
-                        Log.d("ALGO", "Item $name required $extraPacks more packs.")
                     }
                 } else {
-                    // Completely new entry to the pantry
                     val key = pantryRef.push().key ?: return@forEach
                     val orderCount = calculateOrderCount(amountStr, cheapestItem.size, multiplier)
                     val linePrice = cheapestItem.price * orderCount
 
                     val pantryItem = mapOf(
                         "id" to key,
-                        "name" to cheapestItem.name, 
+                        "name" to cheapestItem.name,
                         "amount" to scaleAmount(amountStr, multiplier),
                         "recipeTitle" to recipe.title,
                         "isChecked" to true,
@@ -296,8 +293,7 @@ class RecipeDetailsActivity : AppCompatActivity() {
                         "ingredientTag" to cheapestItem.ingredient
                     )
                     updates[key] = pantryItem
-                    
-                    // Add to temporary map so multiple items in the SAME recipe add correctly if they share a category
+
                     val newItem = PantryIngredient(
                         id = key,
                         name = cheapestItem.name,
@@ -310,13 +306,11 @@ class RecipeDetailsActivity : AppCompatActivity() {
                     currentPantryItems[standardTag] = newItem
                 }
             }
-            
+
             if (updates.isNotEmpty()) {
                 pantryRef.updateChildren(updates).addOnSuccessListener {
                     Toast.makeText(this, "Optimized items added to Pantry!", Toast.LENGTH_SHORT).show()
                 }
-            } else {
-                Toast.makeText(this, "Existing stock in Pantry is enough!", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -333,6 +327,8 @@ class RecipeDetailsActivity : AppCompatActivity() {
             "imageResourceName" to recipe.imageResourceName,
             "ingredients" to recipe.ingredients,
             "steps" to recipe.steps,
+            "totalTime" to recipe.totalTime,
+            "tasteProfile" to recipe.tasteProfile,
             "servings" to 1
         )
         savedRecipesRef.child(key).setValue(saveMap)
