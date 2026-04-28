@@ -101,7 +101,8 @@ class OrderConfirmationActivity : AppCompatActivity() {
         })
 
         inner.addView(TextView(this).apply {
-            text = "${item.name} x${item.count}"
+            val sizeText = if (!item.size.isNullOrEmpty()) " (${item.size})" else ""
+            text = "${item.name} x${item.count}$sizeText"
             textSize = 14f
             setTypeface(null, Typeface.BOLD)
         })

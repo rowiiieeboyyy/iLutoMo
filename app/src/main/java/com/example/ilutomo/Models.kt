@@ -3,6 +3,7 @@ package com.example.ilutomo
 import com.google.firebase.database.Exclude
 import com.google.firebase.database.IgnoreExtraProperties
 import java.io.Serializable
+import kotlin.math.ceil
 
 @IgnoreExtraProperties
 data class Recipe(
@@ -141,3 +142,75 @@ data class DisplayIngredient(
     val amount: String,
     var isChecked: Boolean = false
 )
+
+object PriceCalculator {
+    fun extractNumericValue(input: String): Double {
+        val numberRegex = "([0-9]*\\.?[0-9]+)".toRegex()
+        return numberRegex.find(input)?.value?.toDoubleOrNull() ?: 0.0
+    }
+
+    fun calculateOrderCount(requiredPerServing: String, itemSize: String, multiplier: Int): Int {
+        val reqValue = extractNumericValue(requiredPerServing)
+        val sizeValue = extractNumericValue(itemSize)
+        if (sizeValue <= 0 || reqValue <= 0) return multiplier
+        val totalNeeded = reqValue * multiplier
+        return ceil(totalNeeded / sizeValue).toInt().coerceAtLeast(1)
+    }
+
+    fun findCheapestMatch(ingredientName: String, inventory: List<InventoryItem>): InventoryItem? {
+        val queryClean = ingredientName.lowercase().trim().replace(Regex("[^a-z0-9 ]"), " ")
+        val queryWords = queryClean.split(" ").map { it.removeSuffix("s") }.filter { it.isNotBlank() }
+
+        if (queryWords.isEmpty()) return null
+
+        val scoredItems = inventory.mapNotNull { item ->
+            if (item.stock <= 0 || item.price <= 0) return@mapNotNull null
+
+            val itemName = item.name.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
+            val itemIng = item.ingredient.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
+            val itemTag = item.ingredientTag.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
+
+            val combined = "$itemName $itemIng $itemTag"
+
+            var score = 0
+            if (itemName.trim() == queryClean || itemIng.trim() == queryClean) {
+                score = 1000
+            } else {
+                val matchCount = queryWords.count { qWord -> combined.contains(qWord) }
+                if (matchCount == 0) return@mapNotNull null
+                score = matchCount
+            }
+
+            item to score
+        }
+
+        if (scoredItems.isEmpty()) return null
+
+        val maxScore = scoredItems.maxOf { it.second }
+        val bestMatches = scoredItems.filter { it.second == maxScore }.map { it.first }
+
+        return bestMatches.minByOrNull { it.price }
+    }
+
+    fun calculateRecipePrice(recipe: Recipe, inventory: List<InventoryItem>, multiplier: Int): Double {
+        var totalPrice = 0.0
+        recipe.ingredients?.forEach { (name, amount) ->
+            val cheapestItem = findCheapestMatch(name, inventory)
+            if (cheapestItem != null) {
+                val orderCount = calculateOrderCount(amount.toString(), cheapestItem.size, multiplier)
+                totalPrice += cheapestItem.price * orderCount
+            }
+        }
+        return totalPrice
+    }
+
+    fun scaleAmount(amount: String, multiplier: Int): String {
+        val numberRegex = "([0-9]*\\.?[0-9]+)".toRegex()
+        val match = numberRegex.find(amount)
+        return if (match != null) {
+            val scaledValue = match.value.toDouble() * multiplier
+            val formattedValue = if (scaledValue % 1 == 0.0) scaledValue.toInt().toString() else "%.1f".format(scaledValue)
+            amount.replaceFirst(match.value, formattedValue)
+        } else amount
+    }
+}

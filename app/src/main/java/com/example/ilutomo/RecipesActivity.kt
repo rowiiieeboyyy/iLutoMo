@@ -137,43 +137,6 @@ class RecipesActivity : AppCompatActivity() {
         })
     }
 
-    private fun findCheapestMatch(ingredientName: String): InventoryItem? {
-        val queryClean = ingredientName.lowercase().trim().replace(Regex("[^a-z0-9 ]"), " ")
-        val queryWords = queryClean.split(" ").map { it.removeSuffix("s") }.filter { it.isNotBlank() }
-        
-        val scoredItems = allStoreItems.mapNotNull { item ->
-            if (item.stock <= 0 || item.price <= 0) return@mapNotNull null
-            val itemName = item.name.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
-            val itemIng = item.ingredient.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
-            val combined = "$itemName $itemIng"
-            
-            var score = 0
-            if (itemName.trim() == queryClean || itemIng.trim() == queryClean) {
-                score = 1000
-            } else {
-                val matchCount = queryWords.count { qWord -> combined.contains(qWord) }
-                if (matchCount == 0) return@mapNotNull null
-                score = matchCount
-            }
-            item to score
-        }
-        if (scoredItems.isEmpty()) return null
-        val maxScore = scoredItems.maxOf { it.second }
-        return scoredItems.filter { it.second == maxScore }.map { it.first }.minByOrNull { it.price }
-    }
-
-    private fun extractNumericValue(input: String): Double {
-        val numberRegex = "([0-9]*\\.?[0-9]+)".toRegex()
-        return numberRegex.find(input)?.value?.toDoubleOrNull() ?: 0.0
-    }
-
-    private fun calculateOrderCount(requiredPerServing: String, itemSize: String, multiplier: Int): Int {
-        val reqValue = extractNumericValue(requiredPerServing)
-        val sizeValue = extractNumericValue(itemSize)
-        if (sizeValue <= 0 || reqValue <= 0) return multiplier
-        return ceil((reqValue * multiplier) / sizeValue).toInt().coerceAtLeast(1)
-    }
-
     private fun showAllRecipesDiscovery(btnChoose: Button) {
         val uid = auth.currentUser?.uid ?: return
         database.child("Users").child(uid).child("AddedRecipes").get().addOnSuccessListener { recipeSnap ->
@@ -251,15 +214,16 @@ class RecipesActivity : AppCompatActivity() {
         var estimatedTotalPrice = 0.0
 
         currentIngredients.forEach { ing ->
-            val scaledAmount = scaleAmount(ing.amount, multiplier)
+            val scaledAmount = PriceCalculator.scaleAmount(ing.amount, multiplier)
             
-            val cheapestItem = findCheapestMatch(ing.name)
+            val cheapestItem = PriceCalculator.findCheapestMatch(ing.name, allStoreItems)
             val priceText: String
             
             if (cheapestItem != null) {
-                val orderCount = calculateOrderCount(ing.amount, cheapestItem.size, multiplier)
+                val orderCount = PriceCalculator.calculateOrderCount(ing.amount, cheapestItem.size, multiplier)
                 val cost = cheapestItem.price * orderCount
-                priceText = " - ₱${String.format("%.2f", cost)} (${cheapestItem.name})"
+                val sizeText = if (cheapestItem.size.isNotEmpty()) " [${cheapestItem.size}]" else ""
+                priceText = " - ₱${String.format("%.2f", cost)} (${cheapestItem.name}$sizeText)"
                 if (ing.isChecked) estimatedTotalPrice += cost
             } else {
                 priceText = " - Not Available"
@@ -273,14 +237,20 @@ class RecipesActivity : AppCompatActivity() {
         val spannable = SpannableString(fullText.toString())
         var currentPos = 0
         currentIngredients.forEach { ing ->
-            val scaledAmount = scaleAmount(ing.amount, multiplier)
-            val cheapestItem = findCheapestMatch(ing.name)
-            val priceText = if (cheapestItem != null) {
-                val orderCount = calculateOrderCount(ing.amount, cheapestItem.size, multiplier)
-                " - ₱${String.format("%.2f", cheapestItem.price * orderCount)} (${cheapestItem.name})"
-            } else " - Not Available"
+            val scaledAmount = PriceCalculator.scaleAmount(ing.amount, multiplier)
+            val cheapestItem = PriceCalculator.findCheapestMatch(ing.name, allStoreItems)
             
-            val segment = "${ing.name} ($scaledAmount)$priceText\n\n"
+            val segmentPricePart: String
+            if (cheapestItem != null) {
+                val orderCount = PriceCalculator.calculateOrderCount(ing.amount, cheapestItem.size, multiplier)
+                val cost = cheapestItem.price * orderCount
+                val sizeText = if (cheapestItem.size.isNotEmpty()) " [${cheapestItem.size}]" else ""
+                segmentPricePart = " - ₱${String.format("%.2f", cost)} (${cheapestItem.name}$sizeText)"
+            } else {
+                segmentPricePart = " - Not Available"
+            }
+            
+            val segment = "${ing.name} ($scaledAmount)$segmentPricePart\n\n"
             
             if (!ing.isChecked) {
                 spannable.setSpan(StrikethroughSpan(), currentPos, currentPos + ing.name.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -291,16 +261,6 @@ class RecipesActivity : AppCompatActivity() {
             currentPos += segment.length
         }
         tvNeeded.text = spannable
-    }
-
-    private fun scaleAmount(amount: String, multiplier: Int): String {
-        val numberRegex = "([0-9]*\\.?[0-9]+)".toRegex()
-        val match = numberRegex.find(amount)
-        return if (match != null) {
-            val scaledValue = match.value.toDouble() * multiplier
-            val formatted = if (scaledValue % 1 == 0.0) scaledValue.toInt().toString() else "%.1f".format(scaledValue)
-            amount.replaceFirst(match.value, formatted)
-        } else amount
     }
 
     private fun showAccurateMacrosDialog(recipe: Recipe) {
@@ -320,10 +280,10 @@ class RecipesActivity : AppCompatActivity() {
 
         recipe.ingredients?.forEach { (fullName, amount) ->
             val cleanName = fullName.split("(")[0].trim()
-            val qtyNumeric = (amount.toString().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0)
+            val qtyNumeric = PriceCalculator.extractNumericValue(amount.toString())
             val scaledQty = qtyNumeric * multiplier
             val entry = ingredientLibrary.entries.find { it.key.equals(cleanName, true) }?.value
-            val cheapestItem = findCheapestMatch(fullName)
+            val cheapestItem = PriceCalculator.findCheapestMatch(fullName, allStoreItems)
 
             if (entry != null) {
                 val factor = if (cleanName.contains("Egg", true)) scaledQty else (scaledQty / 50.0)
@@ -332,12 +292,13 @@ class RecipesActivity : AppCompatActivity() {
                 val prot = factor * (entry["pro"] ?: 0.0)
                 totalCals += kcal; totalCarbs += carbs; totalProt += prot
                 
-                contentBuilder.append("• $fullName (${scaleAmount(amount.toString(), multiplier)})\n")
+                contentBuilder.append("• $fullName (${PriceCalculator.scaleAmount(amount.toString(), multiplier)})\n")
                 if (cheapestItem != null) {
-                    val orderCount = calculateOrderCount(amount.toString(), cheapestItem.size, multiplier)
+                    val orderCount = PriceCalculator.calculateOrderCount(amount.toString(), cheapestItem.size, multiplier)
                     val cost = cheapestItem.price * orderCount
                     totalPrice += cost
-                    contentBuilder.append("   ₱${String.format("%.2f", cost)} | ${kcal.toInt()} kcal | P: ${prot.toInt()}g\n\n")
+                    val sizeText = if (cheapestItem.size.isNotEmpty()) " [${cheapestItem.size}]" else ""
+                    contentBuilder.append("   ₱${String.format("%.2f", cost)} (${cheapestItem.name}$sizeText) | ${kcal.toInt()} kcal | P: ${prot.toInt()}g\n\n")
                 } else {
                     contentBuilder.append("   Not Available | ${kcal.toInt()} kcal | P: ${prot.toInt()}g\n\n")
                 }
@@ -378,22 +339,23 @@ class RecipesActivity : AppCompatActivity() {
 
         val pantryRef = database.child("Users").child(uid).child("Pantry")
         selected.forEach { ing ->
-            val cheapestItem = findCheapestMatch(ing.name)
+            val cheapestItem = PriceCalculator.findCheapestMatch(ing.name, allStoreItems)
             val key = pantryRef.push().key ?: return@forEach
 
-            val orderCount = if (cheapestItem != null) calculateOrderCount(ing.amount, cheapestItem.size, multiplier) else multiplier
+            val orderCount = if (cheapestItem != null) PriceCalculator.calculateOrderCount(ing.amount, cheapestItem.size, multiplier) else multiplier
             val linePrice = if (cheapestItem != null) cheapestItem.price * orderCount else 0.0
 
             val item = mapOf(
                 "id" to key,
                 "name" to (cheapestItem?.name ?: ing.name),
-                "amount" to scaleAmount(ing.amount, multiplier),
+                "amount" to PriceCalculator.scaleAmount(ing.amount, multiplier),
                 "recipeTitle" to recipe.title,
                 "isChecked" to true,
                 "count" to orderCount,
                 "price" to linePrice,
                 "imageUrl" to (cheapestItem?.img ?: ""),
-                "ingredientTag" to (cheapestItem?.ingredient ?: ing.name)
+                "ingredientTag" to (cheapestItem?.ingredient ?: ing.name),
+                "size" to (cheapestItem?.size ?: "")
             )
             pantryRef.child(key).setValue(item)
         }

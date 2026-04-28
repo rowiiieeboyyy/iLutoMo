@@ -155,7 +155,6 @@ class BusinessOrdersActivity : AppCompatActivity() {
             val intent = when (item.itemId) {
                 R.id.nav_business_dashboard -> Intent(this, BusinessDashboardActivity::class.java)
                 R.id.nav_business_inventory -> Intent(this, BusinessInventoryActivity::class.java)
-                R.id.nav_business_manage -> Intent(this, BusinessManageActivity::class.java)
                 R.id.nav_business_profile -> Intent(this, BusinessProfileActivity::class.java)
                 else -> null
             }

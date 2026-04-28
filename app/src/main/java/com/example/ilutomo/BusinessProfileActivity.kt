@@ -133,7 +133,6 @@ class BusinessProfileActivity : AppCompatActivity() {
                 R.id.nav_business_dashboard -> Intent(this, BusinessDashboardActivity::class.java)
                 R.id.nav_business_inventory -> Intent(this, BusinessInventoryActivity::class.java)
                 R.id.nav_business_orders -> Intent(this, BusinessOrdersActivity::class.java)
-                R.id.nav_business_manage -> Intent(this, BusinessManageActivity::class.java)
                 else -> null
             }
             intent?.let {

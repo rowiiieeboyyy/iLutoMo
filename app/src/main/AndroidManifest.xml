@@ -93,9 +93,6 @@
             android:name=".BusinessOrdersActivity"
             android:exported="false" />
         <activity
-            android:name=".BusinessManageActivity"
-            android:exported="false" />
-        <activity
             android:name=".BusinessProfileActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustPan" />

@@ -22,9 +22,15 @@ class RecipeAdapter(
     private val auth = FirebaseAuth.getInstance()
     private val database = FirebaseDatabase.getInstance().reference
     private val savedRecipeIds = mutableSetOf<String>()
+    private var inventoryItems = listOf<InventoryItem>()
 
     init {
         fetchSavedRecipes()
+    }
+
+    fun updateInventory(newInventory: List<InventoryItem>) {
+        this.inventoryItems = newInventory
+        notifyDataSetChanged()
     }
 
     private fun fetchSavedRecipes() {
@@ -86,10 +92,14 @@ class RecipeAdapter(
             }
         }
 
-        // DISPLAY TOTAL ESTIMATED PRICE
+        // DISPLAY TOTAL ESTIMATED PRICE - Recalculated for accurate rounding
         holder.tvPrice?.let {
             it.visibility = View.VISIBLE
-            val total = recipe.calculatedPrice * multiplier
+            val total = if (inventoryItems.isNotEmpty()) {
+                PriceCalculator.calculateRecipePrice(recipe, inventoryItems, multiplier)
+            } else {
+                recipe.calculatedPrice * multiplier
+            }
             it.text = "₱${String.format(Locale.getDefault(), "%.2f", total)}"
         }
 
@@ -110,10 +120,9 @@ class RecipeAdapter(
 
         val isSaved = savedRecipeIds.contains(recipe.id)
         
-        // FIXED: Using material checkmark icon instead of standard indicator
         if (isSaved) {
             holder.btnAdd.setImageResource(android.R.drawable.checkbox_on_background)
-            holder.btnAdd.setColorFilter(Color.parseColor("#4CAF50")) // Nice Green
+            holder.btnAdd.setColorFilter(Color.parseColor("#4CAF50"))
         } else {
             holder.btnAdd.setImageResource(android.R.drawable.ic_input_add)
             holder.btnAdd.setColorFilter(null)

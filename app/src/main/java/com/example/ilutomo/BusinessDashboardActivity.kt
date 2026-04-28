@@ -63,7 +63,6 @@ class BusinessDashboardActivity : AppCompatActivity() {
     private fun fetchBusinessInfoAndLoadData() {
         val uid = auth.currentUser?.uid ?: return
         
-        // FIX: Load stats immediately regardless of businessName status
         loadInventoryStats()
         loadActiveOrders()
 
@@ -81,7 +80,6 @@ class BusinessDashboardActivity : AppCompatActivity() {
 
     private fun loadInventoryStats() {
         val uid = auth.currentUser?.uid ?: return
-        // Using UID as the key based on the database structure
         database.child("Businesses").child(uid).child("inventory")
             .addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
@@ -102,7 +100,6 @@ class BusinessDashboardActivity : AppCompatActivity() {
                     binding.tvLowStock.text = allLowStock.size.toString()
                     binding.tvLowStockAlertTitle.text = "Low Stock Alerts (${allLowStock.size})"
                     
-                    // Show/Hide low stock card based on count
                     binding.cvLowStock.visibility = if (allLowStock.isEmpty()) View.GONE else View.VISIBLE
                     
                     lowStockItems.clear()
@@ -176,11 +173,6 @@ class BusinessDashboardActivity : AppCompatActivity() {
                     finish()
                     true
                 }
-                R.id.nav_business_manage -> {
-                    startActivity(Intent(this, BusinessManageActivity::class.java))
-                    finish()
-                    true
-                }
                 R.id.nav_business_profile -> {
                     startActivity(Intent(this, BusinessProfileActivity::class.java))
                     finish()
@@ -247,7 +239,6 @@ class BusinessDashboardActivity : AppCompatActivity() {
 
             holder.tvOrderStatusBrief.text = order.status
             
-            // FETCH CUSTOMER NAME from Firestore
             holder.tvCustomerName.text = "Loading..."
             val firestore = FirebaseFirestore.getInstance()
             firestore.collection("users").document(order.userId).get()

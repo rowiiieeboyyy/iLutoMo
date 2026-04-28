@@ -359,7 +359,6 @@ class BusinessInventoryActivity : AppCompatActivity() {
                 R.id.nav_business_dashboard -> { startActivity(Intent(this, BusinessDashboardActivity::class.java)); finish(); true }
                 R.id.nav_business_inventory -> true
                 R.id.nav_business_orders -> { startActivity(Intent(this, BusinessOrdersActivity::class.java)); finish(); true }
-                R.id.nav_business_manage -> { startActivity(Intent(this, BusinessManageActivity::class.java)); finish(); true }
                 R.id.nav_business_profile -> { startActivity(Intent(this, BusinessProfileActivity::class.java)); finish(); true }
                 else -> false
             }

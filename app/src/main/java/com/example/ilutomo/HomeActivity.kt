@@ -19,6 +19,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import com.google.firebase.firestore.FirebaseFirestore
 import java.util.*
+import kotlin.math.ceil
 
 class HomeActivity : AppCompatActivity() {
 
@@ -109,7 +110,8 @@ class HomeActivity : AppCompatActivity() {
                             r.ingredients?.forEach { (name, amt) ->
                                 val lib = ingredientLibrary[name]
                                 if (lib != null) {
-                                    val qty = amt.toString().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 1.0
+                                    val amountStr = amt.toString()
+                                    val qty = PriceCalculator.extractNumericValue(amountStr)
                                     val factor = if (name.contains("Egg", true)) qty else (qty / 50.0)
 
                                     // Macros
@@ -118,14 +120,12 @@ class HomeActivity : AppCompatActivity() {
                                     sug += factor * toFilterDouble(lib.child("sugar").value, 0.0)
                                     cal += factor * toFilterDouble(lib.child("cal").value, 0.0)
 
-                                    // Pricing Logic: Check Business Inventory first
-                                    val query = name.lowercase().trim()
-                                    val cheapestItem = businessInventory.filter { inv ->
-                                        inv.stock > 0 && (inv.name.lowercase().contains(query) || inv.ingredient.lowercase().contains(query))
-                                    }.minByOrNull { it.price }
+                                    // Pricing Logic: Use calculation logic from details page for consistency
+                                    val cheapestItem = PriceCalculator.findCheapestMatch(name, businessInventory)
 
                                     if (cheapestItem != null) {
-                                        totalPrice += cheapestItem.price
+                                        val orderCount = PriceCalculator.calculateOrderCount(amountStr, cheapestItem.size, 1)
+                                        totalPrice += cheapestItem.price * orderCount
                                     } else {
                                         // Fallback to library standard price
                                         isMissing = true
@@ -178,8 +178,6 @@ class HomeActivity : AppCompatActivity() {
         filteredList.addAll(baseFiltered)
         recipeAdapter.notifyDataSetChanged()
     }
-
-    // --- REST OF THE METHODS REMAIN THE SAME ---
 
     private fun fetchPreferences() {
         val uid = auth.currentUser?.uid ?: return
@@ -234,13 +232,16 @@ class HomeActivity : AppCompatActivity() {
                                 id = inv.key ?: ""
                                 name = inv.child("name").value?.toString() ?: inv.child("itemName").value?.toString() ?: ""
                                 ingredient = inv.child("ingredient").value?.toString() ?: ""
+                                ingredientTag = inv.child("ingredientTag").value?.toString() ?: ""
                                 price = inv.child("price").value?.toString()?.toDoubleOrNull() ?: 0.0
                                 stock = inv.child("stock").value?.toString()?.toIntOrNull() ?: 0
+                                size = inv.child("size").value?.toString() ?: ""
                             }
                             businessInventory.add(itm)
                         } catch (e: Exception) {}
                     }
                 }
+                recipeAdapter.updateInventory(businessInventory)
                 loadIngredientLibrary()
             }
             override fun onCancelled(e: DatabaseError) {}

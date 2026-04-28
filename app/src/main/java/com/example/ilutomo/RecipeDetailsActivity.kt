@@ -100,48 +100,12 @@ class RecipeDetailsActivity : AppCompatActivity() {
         })
     }
 
-    private fun findCheapestMatch(ingredientName: String): InventoryItem? {
-        val queryClean = ingredientName.lowercase().trim().replace(Regex("[^a-z0-9 ]"), " ")
-        val queryWords = queryClean.split(" ").map { it.removeSuffix("s") }.filter { it.isNotBlank() }
-
-        if (queryWords.isEmpty()) return null
-
-        val scoredItems = allStoreItems.mapNotNull { item ->
-            if (item.stock <= 0 || item.price <= 0) return@mapNotNull null
-
-            val itemName = item.name.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
-            val itemIng = item.ingredient.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
-            val itemTag = item.ingredientTag.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
-
-            val combined = "$itemName $itemIng $itemTag"
-
-            var score = 0
-            if (itemName.trim() == queryClean || itemIng.trim() == queryClean) {
-                score = 1000
-            } else {
-                val matchCount = queryWords.count { qWord -> combined.contains(qWord) }
-                if (matchCount == 0) return@mapNotNull null
-                score = matchCount
-            }
-
-            item to score
-        }
-
-        if (scoredItems.isEmpty()) return null
-
-        val maxScore = scoredItems.maxOf { it.second }
-        val bestMatches = scoredItems.filter { it.second == maxScore }.map { it.first }
-
-        return bestMatches.minByOrNull { it.price }
-    }
-
     private fun setupUI(recipe: Recipe) {
         val multiplier = recipe.servings
         binding.tvDetailTitle.text = recipe.title
         binding.tvDetailDescription.text = recipe.description
         binding.tvDetailServings.text = multiplier.toString()
 
-        // Match your XML IDs: tvDetailPrepTime and tvDetailTags
         binding.tvDetailPrepTime.text = "🕒 ${recipe.totalTime} mins"
 
         val activeTags = recipe.tasteProfile.filter { it.value }.keys
@@ -168,15 +132,16 @@ class RecipeDetailsActivity : AppCompatActivity() {
             val amountStr = rawAmount.toString()
             val scaledAmount = scaleAmount(amountStr, multiplier)
 
-            val cheapestItem = findCheapestMatch(name)
+            val cheapestItem = PriceCalculator.findCheapestMatch(name, allStoreItems)
 
             val priceText: String
             if (cheapestItem != null) {
-                val orderCount = calculateOrderCount(amountStr, cheapestItem.size, multiplier)
+                val orderCount = PriceCalculator.calculateOrderCount(amountStr, cheapestItem.size, multiplier)
                 val cost = cheapestItem.price * orderCount
 
                 val quantityText = if (orderCount > 1) " (x$orderCount)" else ""
-                priceText = " - ₱${String.format("%.2f", cost)} (${cheapestItem.name})$quantityText"
+                val sizeText = if (cheapestItem.size.isNotEmpty()) " [${cheapestItem.size}]" else ""
+                priceText = " - ₱${String.format("%.2f", cost)} (${cheapestItem.name}$sizeText)$quantityText"
                 estimatedTotalPrice += cost
             } else {
                 priceText = " - Not Available"
@@ -205,23 +170,6 @@ class RecipeDetailsActivity : AppCompatActivity() {
         } else amount
     }
 
-    private fun extractNumericValue(input: String): Double {
-        val numberRegex = "([0-9]*\\.?[0-9]+)".toRegex()
-        return numberRegex.find(input)?.value?.toDoubleOrNull() ?: 0.0
-    }
-
-    private fun extractUnit(input: String): String {
-        return input.replace(Regex("[0-9]*\\.?[0-9]+"), "").trim()
-    }
-
-    private fun calculateOrderCount(requiredPerServing: String, itemSize: String, multiplier: Int): Int {
-        val reqValue = extractNumericValue(requiredPerServing)
-        val sizeValue = extractNumericValue(itemSize)
-        if (sizeValue <= 0 || reqValue <= 0) return multiplier
-        val totalNeeded = reqValue * multiplier
-        return ceil(totalNeeded / sizeValue).toInt().coerceAtLeast(1)
-    }
-
     private fun addToPantry(recipe: Recipe) {
         val uid = auth.currentUser?.uid ?: return
         val pantryRef = database.child("Users").child(uid).child("Pantry")
@@ -242,21 +190,21 @@ class RecipeDetailsActivity : AppCompatActivity() {
             }
 
             recipe.ingredients?.forEach { (name, amount) ->
-                val cheapestItem = findCheapestMatch(name) ?: return@forEach
+                val cheapestItem = PriceCalculator.findCheapestMatch(name, allStoreItems) ?: return@forEach
                 val amountStr = amount.toString()
 
                 val standardTag = cheapestItem.ingredient.lowercase().trim()
                 val existing = currentPantryItems[standardTag]
 
                 if (existing != null) {
-                    val unitSize = extractNumericValue(existing.size)
+                    val unitSize = PriceCalculator.extractNumericValue(existing.size)
                     if (unitSize <= 0) return@forEach
 
                     val totalVolumePurchased = unitSize * existing.count
-                    val volumeAlreadyNeeded = extractNumericValue(existing.amount)
+                    val volumeAlreadyNeeded = PriceCalculator.extractNumericValue(existing.amount)
                     val volumeAvailable = (totalVolumePurchased - volumeAlreadyNeeded).coerceAtLeast(0.0)
 
-                    val volumeNeededNow = extractNumericValue(amountStr) * multiplier
+                    val volumeNeededNow = PriceCalculator.extractNumericValue(amountStr) * multiplier
 
                     if (volumeAvailable >= volumeNeededNow) {
                         val newTotalAmount = volumeAlreadyNeeded + volumeNeededNow
@@ -277,7 +225,7 @@ class RecipeDetailsActivity : AppCompatActivity() {
                     }
                 } else {
                     val key = pantryRef.push().key ?: return@forEach
-                    val orderCount = calculateOrderCount(amountStr, cheapestItem.size, multiplier)
+                    val orderCount = PriceCalculator.calculateOrderCount(amountStr, cheapestItem.size, multiplier)
                     val linePrice = cheapestItem.price * orderCount
 
                     val pantryItem = mapOf(
@@ -313,6 +261,10 @@ class RecipeDetailsActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun extractUnit(input: String): String {
+        return input.replace(Regex("[0-9]*\\.?[0-9]+"), "").trim()
     }
 
     private fun saveRecipeToMyList(recipe: Recipe) {
