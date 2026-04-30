@@ -92,7 +92,7 @@ class PantryActivity : AppCompatActivity() {
     private fun checkBudgetAndAdjust() {
         val uid = auth.currentUser?.uid ?: return
         database.child("Users").child(uid).child("Preferences").get().addOnSuccessListener { prefSnap ->
-            val budgetMax = prefSnap.child("budget_max").value?.toString()?.toDoubleOrNull() ?: 10000.0
+            val budgetMax = prefSnap.child("budget_max").value?.toString()?.toDoubleOrNull() ?: 1000.0
             database.child("Users").child(uid).child("Pantry").addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     val currentItems = mutableListOf<PantryIngredient>()

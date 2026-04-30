@@ -45,7 +45,7 @@ class HomeActivity : AppCompatActivity() {
     private var selectedHomepageTaste = ""
     private var forceShortPrepUI = false
 
-    private var budgetMin = 0.0; var budgetMax = 10000.0
+    private var budgetMin = 0.0; var budgetMax = 1000.0
     private var proteinMin = 0.0; var proteinMax = 1000.0
     private var carbsMax = 1000.0
     private var sugarMax = 1000.0
@@ -187,7 +187,7 @@ class HomeActivity : AppCompatActivity() {
                     if (s.exists()) {
                         userDiet = s.child("dietary_type").value?.toString() ?: "Standard"
                         budgetMin = toFilterDouble(s.child("budget_min").value, 0.0)
-                        budgetMax = toFilterDouble(s.child("budget_max").value, 10000.0)
+                        budgetMax = toFilterDouble(s.child("budget_max").value, 1000.0)
                         proteinMin = toFilterDouble(s.child("protein_min").value, 0.0)
                         proteinMax = toFilterDouble(s.child("protein_max").value, 1000.0)
                         carbsMax = toFilterDouble(s.child("carbs_max").value, 1000.0)

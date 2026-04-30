@@ -187,7 +187,7 @@ class ProfileActivity : AppCompatActivity() {
 
         // Numeric Constraints
         prefs["budget_min"] = if (binding.checkBudget.isChecked) binding.rangeBudget.values[0].toInt() else 0
-        prefs["budget_max"] = if (binding.checkBudget.isChecked) (binding.etBudgetInput.text.toString().toIntOrNull() ?: binding.rangeBudget.values[1].toInt()) else 10000
+        prefs["budget_max"] = if (binding.checkBudget.isChecked) (binding.etBudgetInput.text.toString().toIntOrNull() ?: binding.rangeBudget.values[1].toInt()) else 1000
 
         prefs["protein_min"] = if (binding.checkProtein.isChecked) binding.rangeProtein.values[0].toInt() else 0
         prefs["protein_max"] = if (binding.checkProtein.isChecked) (binding.etProteinInput.text.toString().toIntOrNull() ?: binding.rangeProtein.values[1].toInt()) else 1000
@@ -219,7 +219,12 @@ class ProfileActivity : AppCompatActivity() {
                 // Sliders restoration logic
                 fun restoreRange(slider: RangeSlider, check: CheckBox, editText: EditText, key: String, defaultMax: Float) {
                     val min = snapshot.child("${key}_min").value?.toString()?.toFloatOrNull() ?: 0f
-                    val max = snapshot.child("${key}_max").value?.toString()?.toFloatOrNull() ?: defaultMax
+                    var max = snapshot.child("${key}_max").value?.toString()?.toFloatOrNull() ?: defaultMax
+                    
+                    // Clamp to slider bounds to prevent crash if existing value is now out of range
+                    if (max > slider.valueTo) max = slider.valueTo
+                    if (max < slider.valueFrom) max = slider.valueFrom
+
                     if (max < defaultMax || snapshot.child("${key}_max").exists()) {
                         check.isChecked = true
                         slider.values = listOf(min, max)
@@ -228,7 +233,12 @@ class ProfileActivity : AppCompatActivity() {
                 }
 
                 fun restoreSingle(slider: Slider, check: CheckBox, editText: EditText, key: String, defaultMax: Float) {
-                    val max = snapshot.child("${key}_max").value?.toString()?.toFloatOrNull() ?: defaultMax
+                    var max = snapshot.child("${key}_max").value?.toString()?.toFloatOrNull() ?: defaultMax
+                    
+                    // Clamp to slider bounds to prevent crash if existing value is now out of range
+                    if (max > slider.valueTo) max = slider.valueTo
+                    if (max < slider.valueFrom) max = slider.valueFrom
+
                     if (max < defaultMax || snapshot.child("${key}_max").exists()) {
                         check.isChecked = true
                         slider.value = max
@@ -236,7 +246,7 @@ class ProfileActivity : AppCompatActivity() {
                     }
                 }
 
-                restoreRange(binding.rangeBudget, binding.checkBudget, binding.etBudgetInput, "budget", 10000f)
+                restoreRange(binding.rangeBudget, binding.checkBudget, binding.etBudgetInput, "budget", 1000f)
                 restoreRange(binding.rangeProtein, binding.checkProtein, binding.etProteinInput, "protein", 1000f)
                 restoreSingle(binding.rangeCarbs, binding.checkCarbs, binding.etCarbsInput, "carbs", 1000f)
                 restoreSingle(binding.rangeSugar, binding.checkSugar, binding.etSugarInput, "sugar", 1000f)
