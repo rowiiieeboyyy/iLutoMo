@@ -17,6 +17,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import kotlin.math.*
 
@@ -48,6 +50,7 @@ class RecipesActivity : AppCompatActivity() {
         val btnMacros = findViewById<Button>(R.id.btnViewMacros)
         val btnSteps = findViewById<Button>(R.id.btnViewSteps)
         val btnAddToPantry = findViewById<Button>(R.id.btnAddToPantry)
+        val btnLogToDiary = findViewById<Button>(R.id.btnLogToDiary)
         val btnPlus = findViewById<ImageButton>(R.id.btnRecipePlus)
         val btnMinus = findViewById<ImageButton>(R.id.btnRecipeMinus)
         val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNav)
@@ -95,6 +98,7 @@ class RecipesActivity : AppCompatActivity() {
             else showStepsDialog(currentRecipe!!)
         }
         btnAddToPantry.setOnClickListener { addToPantry() }
+        btnLogToDiary.setOnClickListener { logRecipeToDiary() }
     }
 
     private fun loadData() {
@@ -361,5 +365,44 @@ class RecipesActivity : AppCompatActivity() {
         }
         Toast.makeText(this, "Added to Pantry!", Toast.LENGTH_SHORT).show()
         startActivity(Intent(this, PantryActivity::class.java))
+    }
+
+    private fun logRecipeToDiary() {
+        val recipe = currentRecipe ?: return
+        val uid = auth.currentUser?.uid ?: return
+        val multiplier = recipe.servings
+        
+        var totalCals = 0.0; var totalCarbs = 0.0; var totalProt = 0.0; var totalFats = 0.0
+
+        recipe.ingredients?.forEach { (fullName, amount) ->
+            val cleanName = fullName.split("(")[0].trim()
+            val qtyNumeric = PriceCalculator.extractNumericValue(amount.toString())
+            val scaledQty = qtyNumeric * multiplier
+            val entry = ingredientLibrary[cleanName]
+
+            if (entry != null) {
+                val factor = if (cleanName.contains("Egg", true)) scaledQty else (scaledQty / 50.0)
+                totalCals += factor * (entry["cal"] ?: 0.0)
+                totalCarbs += factor * (entry["carb"] ?: 0.0)
+                totalProt += factor * (entry["pro"] ?: 0.0)
+                totalFats += factor * (entry["fat"] ?: 0.0)
+            }
+        }
+
+        val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val entry = DiaryEntry(
+            foodName = recipe.title,
+            calories = totalCals.toInt(),
+            protein = totalProt.toInt(),
+            carbs = totalCarbs.toInt(),
+            fats = totalFats.toInt(),
+            servings = multiplier
+        )
+        
+        database.child("Users").child(uid).child("DailyDiary").child(dateStr).push().setValue(entry)
+            .addOnSuccessListener {
+                Toast.makeText(this, "Recipe logged to Diary!", Toast.LENGTH_SHORT).show()
+                startActivity(Intent(this, DiaryActivity::class.java))
+            }
     }
 }

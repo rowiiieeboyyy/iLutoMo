@@ -1,5 +1,7 @@
 package com.example.ilutomo
 
+import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
@@ -11,7 +13,8 @@ import androidx.appcompat.app.AppCompatActivity
 import com.example.ilutomo.databinding.ActivityRecipeDetailsBinding
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
-import java.util.Locale
+import java.text.SimpleDateFormat
+import java.util.*
 import kotlin.math.*
 
 class RecipeDetailsActivity : AppCompatActivity() {
@@ -53,6 +56,7 @@ class RecipeDetailsActivity : AppCompatActivity() {
 
         binding.fabAddToPantry.setOnClickListener { addToPantry(recipe) }
         binding.btnSaveRecipe.setOnClickListener { saveRecipeToMyList(recipe) }
+        binding.btnLogToDiary.setOnClickListener { logRecipeToDiary(recipe) }
 
         loadBusinessData(recipe)
     }
@@ -168,6 +172,28 @@ class RecipeDetailsActivity : AppCompatActivity() {
             val formattedValue = if (scaledValue % 1 == 0.0) scaledValue.toInt().toString() else "%.1f".format(scaledValue)
             amount.replaceFirst(match.value, formattedValue)
         } else amount
+    }
+
+    private fun logRecipeToDiary(recipe: Recipe) {
+        val uid = auth.currentUser?.uid ?: return
+        val multiplier = recipe.servings
+        val macros = recipe.calculatedMacros
+        
+        val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val entry = DiaryEntry(
+            foodName = recipe.title,
+            calories = (macros["Calories"] ?: 0) * multiplier,
+            protein = (macros["Protein"] ?: 0) * multiplier,
+            carbs = (macros["Carbs"] ?: 0) * multiplier,
+            fats = (macros["Fats"] ?: 0) * multiplier,
+            servings = multiplier
+        )
+        
+        database.child("Users").child(uid).child("DailyDiary").child(dateStr).push().setValue(entry)
+            .addOnSuccessListener {
+                Toast.makeText(this, "Recipe logged to Diary!", Toast.LENGTH_SHORT).show()
+                startActivity(Intent(this, DiaryActivity::class.java))
+            }
     }
 
     private fun addToPantry(recipe: Recipe) {

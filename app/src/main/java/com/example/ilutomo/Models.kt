@@ -39,7 +39,8 @@ data class Recipe(
         "Carbs" to 0,
         "Sugar" to 0,
         "Calories" to 0,
-        "Sodium" to 0
+        "Sodium" to 0,
+        "Fats" to 0
     ),
 
     @get:Exclude
@@ -132,6 +133,20 @@ data class Order(
     var businessName: String = "",
     var pickupAddress: String = "",
     var pickupTime: String = ""
+) : Serializable
+
+/**
+ * Model for Nutrition Diary Entries.
+ */
+data class DiaryEntry(
+    var id: String = "",
+    var foodName: String = "",
+    var calories: Int = 0,
+    var protein: Int = 0,
+    var carbs: Int = 0,
+    var fats: Int = 0,
+    var servings: Int = 1,
+    var timestamp: Long = System.currentTimeMillis()
 ) : Serializable
 
 /**

@@ -10,7 +10,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="24dp"
-        android:text="Recipe Details"
+        android:text="Saved Recipes"
         android:textColor="#1B3022"
         android:textSize="28sp"
         android:textStyle="bold"
@@ -34,7 +34,7 @@
             style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="60dp"
-            android:text="Select from your added recipes"
+            android:text="Select from your saved recipes"
             android:textColor="#1B3022"
             android:textSize="16sp"
             android:textStyle="bold" />
@@ -106,8 +106,8 @@
         <com.google.android.material.card.MaterialCardView
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_margin="8dp"
             android:layout_weight="1"
+            android:layout_margin="8dp"
             app:cardCornerRadius="16dp"
             app:cardElevation="2dp">
 
@@ -160,8 +160,8 @@
         <com.google.android.material.card.MaterialCardView
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_margin="8dp"
             android:layout_weight="1"
+            android:layout_margin="8dp"
             app:cardCornerRadius="16dp"
             app:cardElevation="2dp">
 
@@ -227,6 +227,20 @@
                 android:textColor="#1B3022"
                 app:strokeColor="#1B3022" />
         </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnLogToDiary"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Log to Nutrition Diary"
+            android:textAllCaps="false"
+            android:textColor="#4B8A34"
+            app:strokeColor="#4B8A34"
+            app:cornerRadius="12dp"
+            app:icon="@android:drawable/ic_menu_edit"
+            app:iconTint="#4B8A34" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnAddToPantry"

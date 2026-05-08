@@ -344,7 +344,7 @@
                 android:text="1. Step one\n2. Step two"
                 android:textColor="#333333"
                 android:lineSpacingExtra="8dp"
-                android:layout_marginBottom="120dp"/>
+                android:layout_marginBottom="180dp"/>
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
@@ -359,11 +359,24 @@
         android:elevation="8dp">
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnLogToDiary"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:text="Log to Nutrition Diary"
+            android:textColor="#4B8A34"
+            app:strokeColor="#4B8A34"
+            app:cornerRadius="24dp"
+            app:icon="@android:drawable/ic_menu_edit"
+            app:iconTint="#4B8A34" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSaveRecipe"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
+            android:layout_marginBottom="4dp"
             android:text="Save to My Recipes"
             android:textColor="#2D5A27"
             app:strokeColor="#2D5A27"
