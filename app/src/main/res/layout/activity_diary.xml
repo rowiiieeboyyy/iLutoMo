@@ -147,7 +147,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="0"
-                                android:textColor="#1B3022"
+                                android:textColor="#4B8A34"
                                 android:textSize="28sp"
                                 android:textStyle="bold" />
 
@@ -185,7 +185,7 @@
                             android:layout_weight="1"
                             android:gravity="center"
                             android:orientation="vertical">
-                            <TextView android:id="@+id/tvFoodValue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textStyle="bold" android:textColor="#4B8A34"/>
+                            <TextView android:id="@+id/tvFoodValue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textStyle="bold" android:textColor="#FF0000"/>
                             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Food" android:textSize="12sp" android:textColor="#777777"/>
                         </LinearLayout>
 

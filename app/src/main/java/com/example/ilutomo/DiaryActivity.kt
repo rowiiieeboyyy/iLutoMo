@@ -2,7 +2,6 @@ package com.example.ilutomo
 
 import android.content.Context
 import android.content.Intent
-import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -11,11 +10,11 @@ import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.cardview.widget.CardView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.card.MaterialCardView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import java.text.SimpleDateFormat
@@ -197,17 +196,21 @@ class DiaryActivity : AppCompatActivity() {
         tvRemainingValue?.text = remaining.coerceAtLeast(0).toString()
         tvFoodValue?.text = totalCal.toString()
         
-        val hitColor = Color.parseColor("#4B8A34") // Green
-        val missColor = Color.RED
-        val hitBg = Color.parseColor("#E8F5E9") // Light Green
-        val missBg = Color.parseColor("#FFEBEE") // Light Red
+        val colorRemaining = Color.parseColor("#4B8A34") // Green for Left
+        val colorLogged = Color.RED // Red for Logged
+        val hitBg = Color.parseColor("#F8FDF7")
+        val missBg = Color.parseColor("#FFEBEE")
         
         val isCalHit = totalCal <= calorieGoal || calorieGoal == 0
-        tvRemainingValue?.setTextColor(if (isCalHit) hitColor else missColor)
-        tvFoodValue?.setTextColor(if (isCalHit) hitColor else missColor)
+        
+        // Calories Remaining (Left) is Green, turns Red if exceeded
+        tvRemainingValue?.setTextColor(if (isCalHit) colorRemaining else colorLogged)
+        
+        // Food (Logged) is strictly Red as requested
+        tvFoodValue?.setTextColor(colorLogged)
 
-        // Summary Card color logic
-        findViewById<MaterialCardView>(R.id.cvCalorieSummary)?.setCardBackgroundColor(if (isCalHit) Color.parseColor("#F8FDF7") else missBg)
+        // Using base CardView to avoid ClassCastException
+        findViewById<CardView>(R.id.cvCalorieSummary)?.setCardBackgroundColor(if (isCalHit) hitBg else missBg)
         
         val tvProtein = findViewById<TextView>(R.id.tvProteinValue)
         val tvCarbs = findViewById<TextView>(R.id.tvCarbsValue)
@@ -217,23 +220,28 @@ class DiaryActivity : AppCompatActivity() {
         tvCarbs?.text = "${totalCarb}/${carbsGoal}g"
         tvFats?.text = "${totalFat}/${fatsGoal}g"
 
-        // Protein: Hit if reaches goal (min target)
-        val proHit = totalPro >= proteinGoal || proteinGoal == 0
-        tvProtein?.setTextColor(if (proHit) hitColor else missColor)
-        findViewById<MaterialCardView>(R.id.cvProtein)?.setCardBackgroundColor(if (proHit) hitBg else missBg)
+        // Hit logic from previous requirement: Green if hit, Red if not
+        if (proteinGoal > 0) {
+            val proHit = totalPro >= proteinGoal
+            tvProtein?.setTextColor(if (proHit) colorRemaining else colorLogged)
+            findViewById<CardView>(R.id.cvProtein)?.setCardBackgroundColor(if (proHit) Color.parseColor("#E8F5E9") else missBg)
+        }
         
-        // Carbs: Hit if stays within goal (max limit)
-        val carbHit = totalCarb <= carbsGoal || carbsGoal == 0
-        tvCarbs?.setTextColor(if (carbHit) hitColor else missColor)
-        findViewById<MaterialCardView>(R.id.cvCarbs)?.setCardBackgroundColor(if (carbHit) hitBg else missBg)
-
-        // Fats: Hit if stays within goal (max limit)
-        val fatHit = totalFat <= fatsGoal || fatsGoal == 0
-        tvFats?.setTextColor(if (fatHit) hitColor else missColor)
-        findViewById<MaterialCardView>(R.id.cvFats)?.setCardBackgroundColor(if (fatHit) hitBg else missBg)
+        if (carbsGoal > 0) {
+            val carbHit = totalCarb <= carbsGoal
+            tvCarbs?.setTextColor(if (carbHit) colorRemaining else colorLogged)
+            findViewById<CardView>(R.id.cvCarbs)?.setCardBackgroundColor(if (carbHit) Color.parseColor("#E8F5E9") else missBg)
+        }
+        
+        if (fatsGoal > 0) {
+            val fatHit = totalFat <= fatsGoal
+            tvFats?.setTextColor(if (fatHit) colorRemaining else colorLogged)
+            findViewById<CardView>(R.id.cvFats)?.setCardBackgroundColor(if (fatHit) Color.parseColor("#E8F5E9") else missBg)
+        }
 
         val pb = findViewById<ProgressBar>(R.id.pbCalories)
-        pb?.progressTintList = ColorStateList.valueOf(if (isCalHit) hitColor else missColor)
+        // Set progress to percentage of consumed calories.
+        // XML drawable shows consumed in Red and remaining in Green.
         pb?.progress = if (calorieGoal > 0) ((totalCal.toFloat() / calorieGoal) * 100).toInt().coerceIn(0, 100) else 0
     }
 
@@ -399,7 +407,6 @@ class DiaryActivity : AppCompatActivity() {
             val tvServings: TextView = view.findViewById(R.id.tvEntryServings)
             val tvMacros: TextView = view.findViewById(R.id.tvEntryMacros)
             val tvCal: TextView = view.findViewById(R.id.tvEntryCalories)
-            val tvTime: TextView = view.findViewById(R.id.tvEntryTime)
             val btnDelete: ImageView = view.findViewById(R.id.btnDeleteEntry)
         }
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = ViewHolder(LayoutInflater.from(parent.context).inflate(R.layout.item_diary_entry, parent, false))
@@ -409,10 +416,6 @@ class DiaryActivity : AppCompatActivity() {
             holder.tvServings.text = "(x${entry.servings})"
             holder.tvCal.text = "${entry.calories} kcal"
             holder.tvMacros.text = "P: ${entry.protein}g • C: ${entry.carbs}g • F: ${entry.fats}g"
-            
-            val sdf = SimpleDateFormat("MMM dd, hh:mm a", Locale.getDefault())
-            holder.tvTime.text = sdf.format(Date(entry.timestamp))
-
             holder.btnDelete.setOnClickListener { onDelete(entry) }
             holder.itemView.setOnClickListener { onItemClick(entry) }
         }
