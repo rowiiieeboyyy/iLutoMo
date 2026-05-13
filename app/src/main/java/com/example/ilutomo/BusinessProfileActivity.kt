@@ -1,23 +1,38 @@
 package com.example.ilutomo
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.location.Geocoder
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import com.example.ilutomo.databinding.ActivityBusinessProfileBinding
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.OnMapReadyCallback
+import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.Marker
+import com.google.android.gms.maps.model.MarkerOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import java.util.Locale
 
-class BusinessProfileActivity : AppCompatActivity() {
+class BusinessProfileActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var binding: ActivityBusinessProfileBinding
     private lateinit var auth: FirebaseAuth
     private lateinit var firestore: FirebaseFirestore
     private val realtimeDb = FirebaseDatabase.getInstance().reference
 
+    private var googleMap: GoogleMap? = null
+    private var pinnedMarker: Marker? = null
     private var isEditing = false
+    private var selectedLatLng: LatLng? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,6 +41,9 @@ class BusinessProfileActivity : AppCompatActivity() {
 
         auth = FirebaseAuth.getInstance()
         firestore = FirebaseFirestore.getInstance()
+
+        val mapFragment = supportFragmentManager.findFragmentById(R.id.map) as SupportMapFragment
+        mapFragment.getMapAsync(this)
 
         loadProfile()
         setupBottomNavigation()
@@ -45,15 +63,53 @@ class BusinessProfileActivity : AppCompatActivity() {
             startActivity(intent)
             finish()
         }
+        
+        val serviceIntent = Intent(this, LocationService::class.java)
+        startService(serviceIntent)
+    }
+
+    override fun onMapReady(map: GoogleMap) {
+        googleMap = map
+        
+        googleMap?.setOnMapClickListener { latLng ->
+            if (isEditing) {
+                updatePinnedLocation(latLng)
+            }
+        }
+
+        // Try to center on current location if possible
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            googleMap?.isMyLocationEnabled = true
+        }
+    }
+
+    private fun updatePinnedLocation(latLng: LatLng) {
+        selectedLatLng = latLng
+        pinnedMarker?.remove()
+        pinnedMarker = googleMap?.addMarker(MarkerOptions().position(latLng).title("Store Location"))
+        googleMap?.animateCamera(CameraUpdateFactory.newLatLng(latLng))
+        
+        updateAddressFromLatLng(latLng)
+    }
+
+    private fun updateAddressFromLatLng(latLng: LatLng) {
+        try {
+            val geocoder = Geocoder(this, Locale.getDefault())
+            val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
+            if (!addresses.isNullOrEmpty()) {
+                val address = addresses[0].getAddressLine(0)
+                binding.tvPinnedAddress.text = "Address: $address"
+            }
+        } catch (e: Exception) {
+            binding.tvPinnedAddress.text = "Address: Lat: ${latLng.latitude}, Lng: ${latLng.longitude}"
+        }
     }
 
     private fun toggleEditMode(editing: Boolean) {
         isEditing = editing
         binding.etBusinessName.isEnabled = editing
-        binding.etBusinessAddress.isEnabled = editing
         binding.etBusinessPhone.isEnabled = editing
-        binding.etBusinessLat.isEnabled = editing
-        binding.etBusinessLng.isEnabled = editing
+        binding.ivMapOverlay.visibility = if (editing) View.GONE else View.VISIBLE
 
         binding.btnEditProfile.visibility = if (editing) View.GONE else View.VISIBLE
         binding.btnSaveProfile.visibility = if (editing) View.VISIBLE else View.GONE
@@ -62,21 +118,30 @@ class BusinessProfileActivity : AppCompatActivity() {
     private fun loadProfile() {
         val uid = auth.currentUser?.uid ?: return
 
-        // We load from the permanent UID node now
         firestore.collection("users").document(uid).get()
             .addOnSuccessListener { document ->
                 if (document.exists()) {
                     val bizName = document.getString("businessName") ?: ""
                     binding.etBusinessName.setText(bizName)
 
-                    // Fetch details from RTDB using UID
                     realtimeDb.child("Businesses").child(uid).child("details")
                         .get().addOnSuccessListener { snapshot ->
                             if (snapshot.exists()) {
-                                binding.etBusinessAddress.setText(snapshot.child("address").value?.toString() ?: "")
                                 binding.etBusinessPhone.setText(snapshot.child("phone").value?.toString() ?: "")
-                                binding.etBusinessLat.setText(snapshot.child("latitude").value?.toString() ?: "")
-                                binding.etBusinessLng.setText(snapshot.child("longitude").value?.toString() ?: "")
+                                
+                                val lat = snapshot.child("latitude").value?.toString()?.toDoubleOrNull()
+                                val lng = snapshot.child("longitude").value?.toString()?.toDoubleOrNull()
+                                val address = snapshot.child("address").value?.toString() ?: "Not pinned yet"
+                                
+                                binding.tvPinnedAddress.text = "Address: $address"
+                                
+                                if (lat != null && lng != null) {
+                                    val savedPos = LatLng(lat, lng)
+                                    selectedLatLng = savedPos
+                                    googleMap?.moveCamera(CameraUpdateFactory.newLatLngZoom(savedPos, 15f))
+                                    pinnedMarker?.remove()
+                                    pinnedMarker = googleMap?.addMarker(MarkerOptions().position(savedPos).title("Store Location"))
+                                }
                             }
                         }
                 }
@@ -89,31 +154,25 @@ class BusinessProfileActivity : AppCompatActivity() {
     private fun saveProfile() {
         val uid = auth.currentUser?.uid ?: return
         val newName = binding.etBusinessName.text.toString().trim()
-        val address = binding.etBusinessAddress.text.toString().trim()
         val phone = binding.etBusinessPhone.text.toString().trim()
-        val lat = binding.etBusinessLat.text.toString().toDoubleOrNull() ?: 0.0
-        val lng = binding.etBusinessLng.text.toString().toDoubleOrNull() ?: 0.0
+        val address = binding.tvPinnedAddress.text.toString().removePrefix("Address: ").trim()
 
-        if (newName.isEmpty() || address.isEmpty() || phone.isEmpty()) {
-            Toast.makeText(this, "All fields are required", Toast.LENGTH_SHORT).show()
+        if (newName.isEmpty() || phone.isEmpty() || selectedLatLng == null) {
+            Toast.makeText(this, "All fields and map location are required", Toast.LENGTH_SHORT).show()
             return
         }
 
-        // We include the name inside the details object
         val details = mapOf(
             "businessName" to newName,
             "address" to address,
             "phone" to phone,
-            "latitude" to lat,
-            "longitude" to lng
+            "latitude" to selectedLatLng!!.latitude,
+            "longitude" to selectedLatLng!!.longitude
         )
 
-        // 1. Update Firestore
         firestore.collection("users").document(uid).set(mapOf("businessName" to newName), SetOptions.merge())
             .addOnSuccessListener {
-                // 2. Update RTDB using the UID as the folder key.
-                // This is what prevents duplicate business folders!
-                realtimeDb.child("Businesses").child(uid).child("details").setValue(details)
+                realtimeDb.child("Businesses").child(uid).child("details").updateChildren(details)
                     .addOnSuccessListener {
                         toggleEditMode(false)
                         Toast.makeText(this, "Profile Updated Successfully", Toast.LENGTH_SHORT).show()

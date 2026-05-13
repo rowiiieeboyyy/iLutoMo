@@ -48,15 +48,6 @@
             </LinearLayout>
 
             <TextView
-                android:id="@+id/tvEntryDate"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="Monday"
-                android:textColor="#999999"
-                android:textSize="12sp" />
-
-            <TextView
                 android:id="@+id/tvEntryMacros"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -77,11 +68,11 @@
 
         <ImageView
             android:id="@+id/btnDeleteEntry"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:padding="6dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:padding="8dp"
             android:src="@android:drawable/ic_menu_close_clear_cancel"
-            app:tint="#DDDDDD"
+            app:tint="#FF5252"
             android:layout_marginStart="8dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Delete Entry"/>

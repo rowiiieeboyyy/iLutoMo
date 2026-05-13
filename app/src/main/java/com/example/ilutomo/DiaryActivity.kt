@@ -2,6 +2,7 @@ package com.example.ilutomo
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -15,6 +16,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import java.text.SimpleDateFormat
@@ -40,6 +42,9 @@ class DiaryActivity : AppCompatActivity() {
 
     private val allRecipes = mutableListOf<Recipe>()
     private val ingredientLibrary = mutableMapOf<String, DataSnapshot>()
+
+    private var historyRef: DatabaseReference? = null
+    private var historyListener: ValueEventListener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -168,24 +173,30 @@ class DiaryActivity : AppCompatActivity() {
     private fun loadHistory() {
         val uid = auth.currentUser?.uid ?: return
         val dateStr = dateFormat.format(calendar.time)
-        database.child("Users").child(uid).child("DailyDiary").child(dateStr)
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    entries.clear()
-                    var totalCal = 0; var totalPro = 0; var totalCarb = 0; var totalFat = 0
-                    for (child in snapshot.children) {
-                        val entry = child.getValue(DiaryEntry::class.java) ?: continue
-                        entry.id = child.key ?: ""
-                        entries.add(entry)
-                        totalCal += entry.calories; totalPro += entry.protein; totalCarb += entry.carbs; totalFat += entry.fats
-                    }
-                    entries.sortByDescending { it.timestamp }
-                    adapter.notifyDataSetChanged()
-                    updateUI(totalCal, totalPro, totalCarb, totalFat)
-                    findViewById<TextView>(R.id.tvNoHistory)?.visibility = if (entries.isEmpty()) View.VISIBLE else View.GONE
+
+        // Detach previous listener to avoid multi-date conflicts
+        historyListener?.let { historyRef?.removeEventListener(it) }
+
+        historyRef = database.child("Users").child(uid).child("DailyDiary").child(dateStr)
+        historyListener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                entries.clear()
+                var totalCal = 0; var totalPro = 0; var totalCarb = 0; var totalFat = 0
+                for (child in snapshot.children) {
+                    val entry = child.getValue(DiaryEntry::class.java) ?: continue
+                    entry.id = child.key ?: ""
+                    entry.date = dateStr
+                    entries.add(entry)
+                    totalCal += entry.calories; totalPro += entry.protein; totalCarb += entry.carbs; totalFat += entry.fats
                 }
-                override fun onCancelled(error: DatabaseError) {}
-            })
+                entries.sortByDescending { it.timestamp }
+                adapter.notifyDataSetChanged()
+                updateUI(totalCal, totalPro, totalCarb, totalFat)
+                findViewById<TextView>(R.id.tvNoHistory)?.visibility = if (entries.isEmpty()) View.VISIBLE else View.GONE
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        historyRef?.addValueEventListener(historyListener!!)
     }
 
     private fun updateUI(totalCal: Int, totalPro: Int, totalCarb: Int, totalFat: Int) {
@@ -196,20 +207,16 @@ class DiaryActivity : AppCompatActivity() {
         tvRemainingValue?.text = remaining.coerceAtLeast(0).toString()
         tvFoodValue?.text = totalCal.toString()
         
-        val colorRemaining = Color.parseColor("#4B8A34") // Green for Left
-        val colorLogged = Color.RED // Red for Logged
+        val colorRemaining = Color.parseColor("#4B8A34")
+        val colorLogged = Color.RED
         val hitBg = Color.parseColor("#F8FDF7")
         val missBg = Color.parseColor("#FFEBEE")
         
         val isCalHit = totalCal <= calorieGoal || calorieGoal == 0
         
-        // Calories Remaining (Left) is Green, turns Red if exceeded
         tvRemainingValue?.setTextColor(if (isCalHit) colorRemaining else colorLogged)
-        
-        // Food (Logged) is strictly Red as requested
         tvFoodValue?.setTextColor(colorLogged)
 
-        // Using base CardView to avoid ClassCastException
         findViewById<CardView>(R.id.cvCalorieSummary)?.setCardBackgroundColor(if (isCalHit) hitBg else missBg)
         
         val tvProtein = findViewById<TextView>(R.id.tvProteinValue)
@@ -220,7 +227,6 @@ class DiaryActivity : AppCompatActivity() {
         tvCarbs?.text = "${totalCarb}/${carbsGoal}g"
         tvFats?.text = "${totalFat}/${fatsGoal}g"
 
-        // Hit logic from previous requirement: Green if hit, Red if not
         if (proteinGoal > 0) {
             val proHit = totalPro >= proteinGoal
             tvProtein?.setTextColor(if (proHit) colorRemaining else colorLogged)
@@ -240,8 +246,6 @@ class DiaryActivity : AppCompatActivity() {
         }
 
         val pb = findViewById<ProgressBar>(R.id.pbCalories)
-        // Set progress to percentage of consumed calories.
-        // XML drawable shows consumed in Red and remaining in Green.
         pb?.progress = if (calorieGoal > 0) ((totalCal.toFloat() / calorieGoal) * 100).toInt().coerceIn(0, 100) else 0
     }
 
@@ -328,19 +332,19 @@ class DiaryActivity : AppCompatActivity() {
         val tvServings = dialogView.findViewById<TextView>(R.id.tvDialogServings); val btnMinus = dialogView.findViewById<ImageButton>(R.id.btnDialogMinus); val btnPlus = dialogView.findViewById<ImageButton>(R.id.btnDialogPlus)
 
         var curS = entry.servings.coerceAtLeast(1)
-        var bCal = entry.calories / curS; var bPro = entry.protein / curS; var bCarb = entry.carbs / curS; var bFat = entry.fats / curS
+        val baseCal = entry.calories / curS; val basePro = entry.protein / curS; val baseCarb = entry.carbs / curS; val baseFat = entry.fats / curS
         
         etFood.setText(entry.foodName); tvServings.text = curS.toString()
-        updateDialogMacros(etCal, etPro, etCarb, etFat, bCal, bPro, bCarb, bFat, curS)
+        updateDialogMacros(etCal, etPro, etCarb, etFat, baseCal, basePro, baseCarb, baseFat, curS)
 
         fun onRecipeSelected(recipeTitle: String) {
             etFood.setText(recipeTitle)
             allRecipes.find { it.title.equals(recipeTitle, true) }?.let {
-                bCal = it.calculatedMacros["Calories"] ?: 0
-                bPro = it.calculatedMacros["Protein"] ?: 0
-                bCarb = it.calculatedMacros["Carbs"] ?: 0
-                bFat = it.calculatedMacros["Fats"] ?: 0
-                updateDialogMacros(etCal, etPro, etCarb, etFat, bCal, bPro, bCarb, bFat, curS)
+                val bCalNew = it.calculatedMacros["Calories"] ?: 0
+                val bProNew = it.calculatedMacros["Protein"] ?: 0
+                val bCarbNew = it.calculatedMacros["Carbs"] ?: 0
+                val bFatNew = it.calculatedMacros["Fats"] ?: 0
+                updateDialogMacros(etCal, etPro, etCarb, etFat, bCalNew, bProNew, bCarbNew, bFatNew, curS)
             }
         }
 
@@ -350,11 +354,11 @@ class DiaryActivity : AppCompatActivity() {
             AlertDialog.Builder(this).setTitle("Select Recipe").setItems(items) { _, which -> onRecipeSelected(items[which]) }.show()
         }
 
-        btnPlus.setOnClickListener { curS++; tvServings.text = curS.toString(); updateDialogMacros(etCal, etPro, etCarb, etFat, bCal, bPro, bCarb, bFat, curS) }
-        btnMinus.setOnClickListener { if (curS > 1) { curS--; tvServings.text = curS.toString(); updateDialogMacros(etCal, etPro, etCarb, etFat, bCal, bPro, bCarb, bFat, curS) } }
+        btnPlus.setOnClickListener { curS++; tvServings.text = curS.toString(); updateDialogMacros(etCal, etPro, etCarb, etFat, baseCal, basePro, baseCarb, baseFat, curS) }
+        btnMinus.setOnClickListener { if (curS > 1) { curS--; tvServings.text = curS.toString(); updateDialogMacros(etCal, etPro, etCarb, etFat, baseCal, basePro, baseCarb, baseFat, curS) } }
 
         AlertDialog.Builder(this).setTitle("Edit Entry").setView(dialogView)
-            .setPositiveButton("Update") { _, _ -> updateEntry(entry.id, etFood.text.toString().trim(), etCal.text.toString().toIntOrNull() ?: 0, etPro.text.toString().toIntOrNull() ?: 0, etCarb.text.toString().toIntOrNull() ?: 0, etFat.text.toString().toIntOrNull() ?: 0, curS) }
+            .setPositiveButton("Update") { _, _ -> updateEntry(entry.id, entry.date, etFood.text.toString().trim(), etCal.text.toString().toIntOrNull() ?: 0, etPro.text.toString().toIntOrNull() ?: 0, etCarb.text.toString().toIntOrNull() ?: 0, etFat.text.toString().toIntOrNull() ?: 0, curS) }
             .setNeutralButton("Delete") { _, _ -> deleteEntry(entry) }.setNegativeButton("Cancel", null).show()
     }
 
@@ -365,21 +369,25 @@ class DiaryActivity : AppCompatActivity() {
     private fun saveEntry(name: String, cal: Int, pro: Int, carb: Int, fat: Int, s: Int) {
         val uid = auth.currentUser?.uid ?: return
         val dateStr = dateFormat.format(calendar.time)
-        val entry = DiaryEntry(foodName = name, calories = cal, protein = pro, carbs = carb, fats = fat, servings = s, timestamp = System.currentTimeMillis())
+        val entry = DiaryEntry(foodName = name, calories = cal, protein = pro, carbs = carb, fats = fat, servings = s, date = dateStr, timestamp = System.currentTimeMillis())
         database.child("Users").child(uid).child("DailyDiary").child(dateStr).push().setValue(entry)
+            .addOnSuccessListener { Toast.makeText(this, "Entry saved", Toast.LENGTH_SHORT).show() }
     }
 
-    private fun updateEntry(id: String, name: String, cal: Int, pro: Int, carb: Int, fat: Int, s: Int) {
+    private fun updateEntry(id: String, date: String, name: String, cal: Int, pro: Int, carb: Int, fat: Int, s: Int) {
         val uid = auth.currentUser?.uid ?: return
-        val dateStr = dateFormat.format(calendar.time)
-        val updates = mapOf("foodName" to name, "calories" to cal, "protein" to pro, "carbs" to carb, "fats" to fat, "servings" to s)
-        database.child("Users").child(uid).child("DailyDiary").child(dateStr).child(id).updateChildren(updates)
+        val datePath = if (date.isNotEmpty()) date else dateFormat.format(calendar.time)
+        val updates = mapOf("foodName" to name, "calories" to cal, "protein" to pro, "carbs" to carb, "fats" to fat, "servings" to s, "date" to datePath)
+        database.child("Users").child(uid).child("DailyDiary").child(datePath).child(id).updateChildren(updates)
+            .addOnSuccessListener { Toast.makeText(this, "Entry updated", Toast.LENGTH_SHORT).show() }
     }
 
     private fun deleteEntry(entry: DiaryEntry) {
         val uid = auth.currentUser?.uid ?: return
-        val dateStr = dateFormat.format(calendar.time)
+        val dateStr = if (entry.date.isNotEmpty()) entry.date else dateFormat.format(calendar.time)
         database.child("Users").child(uid).child("DailyDiary").child(dateStr).child(entry.id).removeValue()
+            .addOnSuccessListener { Toast.makeText(this, "Entry deleted", Toast.LENGTH_SHORT).show() }
+            .addOnFailureListener { Toast.makeText(this, "Failed to delete: ${it.message}", Toast.LENGTH_SHORT).show() }
     }
 
     private fun setupBottomNavigation() {
@@ -420,5 +428,10 @@ class DiaryActivity : AppCompatActivity() {
             holder.itemView.setOnClickListener { onItemClick(entry) }
         }
         override fun getItemCount() = list.size
+    }
+
+    override fun onDestroy() {
+        historyListener?.let { historyRef?.removeEventListener(it) }
+        super.onDestroy()
     }
 }

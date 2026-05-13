@@ -146,6 +146,7 @@ data class DiaryEntry(
     var carbs: Int = 0,
     var fats: Int = 0,
     var servings: Int = 1,
+    var date: String = "", // Added to store the yyyy-MM-dd date
     var timestamp: Long = System.currentTimeMillis()
 ) : Serializable
 

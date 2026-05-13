@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
+import android.util.Log
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.Toast
@@ -80,7 +81,6 @@ class MainActivity : AppCompatActivity() {
 
         // 2. GOOGLE LOGIN
         btnGoogle.setOnClickListener {
-            // FIX 1: Force account picker by signing out of the client before starting the intent
             googleSignInClient.signOut().addOnCompleteListener {
                 val signInIntent = googleSignInClient.signInIntent
                 startActivityForResult(signInIntent, 1001)
@@ -111,7 +111,7 @@ class MainActivity : AppCompatActivity() {
                 val account = task.getResult(ApiException::class.java)!!
                 firebaseAuthWithGoogle(account.idToken!!)
             } catch (e: ApiException) {
-                Toast.makeText(this, "Google sign in failed", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Google sign in failed: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -123,7 +123,7 @@ class MainActivity : AppCompatActivity() {
                 val user = auth.currentUser
                 user?.let { checkUserTypeAndRedirect(it.uid) }
             } else {
-                Toast.makeText(this, "Firebase Authentication failed.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Firebase Auth failed: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -140,36 +140,37 @@ class MainActivity : AppCompatActivity() {
         editor.apply()
     }
 
-    // FIX 2: Check existence to avoid duplicate "Registration" logs on Admin Dashboard
     private fun checkUserTypeAndRedirect(uid: String) {
         val currentUserEmail = auth.currentUser?.email ?: "Unknown"
 
-        db.collection("users").document(uid).get().addOnSuccessListener { document ->
-            if (document.exists()) {
-                // Existing user: Log as Login
-                val type = document.getString("accountType") ?: "Personal"
-                logActivityToAdmin(currentUserEmail, "Login", "Google Login into $type account")
+        db.collection("users").document(uid).get()
+            .addOnSuccessListener { document ->
+                if (document.exists()) {
+                    val type = document.getString("accountType") ?: "Personal"
+                    logActivityToAdmin(currentUserEmail, "Login", "Login into $type account")
 
-                val intent = if (type == "Business") {
-                    Intent(this, BusinessDashboardActivity::class.java)
+                    val intent = if (type == "Business") {
+                        Intent(this, BusinessDashboardActivity::class.java)
+                    } else {
+                        Intent(this, HomeActivity::class.java)
+                    }
+                    startActivity(intent)
+                    finish()
                 } else {
-                    Intent(this, HomeActivity::class.java)
+                    logActivityToAdmin(currentUserEmail, "Auth Initialized", "New user redirected to SignUp")
+                    val intent = Intent(this, SignUpActivity::class.java)
+                    startActivity(intent)
+                    finish()
                 }
-                startActivity(intent)
-                finish()
-            } else {
-                // NEW Gmail user: We need to send them to SignUpActivity to choose account type
-                // This prevents them from skipping the "Personal vs Business" choice
-                logActivityToAdmin(currentUserEmail, "Auth Initialized", "New Google user redirected to SignUp")
-
-                val intent = Intent(this, SignUpActivity::class.java)
-                startActivity(intent)
-                finish()
             }
-        }
+            .addOnFailureListener { e ->
+                Log.e("FIRESTORE_LOGIN", "Error fetching user doc", e)
+                Toast.makeText(this, "Database error: ${e.message}. Check your Firestore permissions.", Toast.LENGTH_LONG).show()
+                // Log them out so they can try again once permissions are fixed
+                auth.signOut()
+            }
     }
 
-    // Helper for Admin Dashboard Logging
     private fun logActivityToAdmin(email: String, action: String, details: String) {
         val log = hashMapOf(
             "userEmail" to email,
@@ -178,5 +179,6 @@ class MainActivity : AppCompatActivity() {
             "timestamp" to com.google.firebase.Timestamp.now()
         )
         db.collection("UserActivities").add(log)
+            .addOnFailureListener { e -> Log.w("LOG_ADMIN", "Failed to log activity", e) }
     }
 }

@@ -11,6 +11,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.*
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FieldValue
 
@@ -20,6 +21,7 @@ class LocationService : Service() {
     private lateinit var locationCallback: LocationCallback
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
+    private var accountType: String? = null
 
     companion object {
         private const val CHANNEL_ID = "location_channel"
@@ -30,17 +32,23 @@ class LocationService : Service() {
         super.onCreate()
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
+        val uid = auth.currentUser?.uid
+        if (uid != null) {
+            db.collection("users").document(uid).get().addOnSuccessListener {
+                accountType = it.getString("accountType")
+            }
+        }
+
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(lr: LocationResult) {
                 val location = lr.lastLocation ?: return
-                updateFirestore(location.latitude, location.longitude)
+                updateLocations(location.latitude, location.longitude)
                 Log.d("LocationService", "New Location: ${location.latitude}, ${location.longitude}")
             }
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Ensure user is still logged in before starting
         if (auth.currentUser == null) {
             stopSelf()
             return START_NOT_STICKY
@@ -50,14 +58,13 @@ class LocationService : Service() {
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("iLutoMo Tracking Active")
-            .setContentText("Your live location is shared with the seller.")
-            .setSmallIcon(R.mipmap.ic_launcher) // Ensure this icon exists
+            .setContentText("Your live location is shared for order coordination.")
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        // Handle Android 14+ Foreground Service types (MUST match Manifest)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
@@ -75,10 +82,9 @@ class LocationService : Service() {
     }
 
     private fun requestUpdates() {
-        val req = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000) // 10 seconds
-            .setMinUpdateIntervalMillis(5000) // 5 seconds
-            .setMinUpdateDistanceMeters(2f)   // Reduced sensitivity to save battery (2 meters)
-            .setWaitForAccurateLocation(false)
+        val req = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000)
+            .setMinUpdateIntervalMillis(5000)
+            .setMinUpdateDistanceMeters(2f)
             .build()
 
         try {
@@ -89,32 +95,31 @@ class LocationService : Service() {
         }
     }
 
-    private fun updateFirestore(lat: Double, lng: Double) {
+    private fun updateLocations(lat: Double, lng: Double) {
         val userId = auth.currentUser?.uid ?: return
 
+        // 1. Update Firestore (Common for both)
         val updates = hashMapOf(
             "latitude" to lat,
             "longitude" to lng,
             "lastLocationUpdate" to FieldValue.serverTimestamp(),
             "isTrackingActive" to true
         )
-
-        // Using "users" collection as per your logic
         db.collection("users").document(userId).update(updates as Map<String, Any>)
-            .addOnFailureListener { e ->
-                Log.e("LocationService", "Firestore update failed: ${e.message}")
-            }
+
+        // 2. Update Realtime DB if Business (So users can find closest store)
+        if (accountType == "Business") {
+            val rtdbUpdates = mapOf(
+                "latitude" to lat,
+                "longitude" to lng
+            )
+            FirebaseDatabase.getInstance().reference.child("Businesses").child(userId).child("details").updateChildren(rtdbUpdates)
+        }
     }
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val chan = NotificationChannel(
-                CHANNEL_ID,
-                "Live Order Tracking",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Used for showing live location tracking status"
-            }
+            val chan = NotificationChannel(CHANNEL_ID, "Live Tracking", NotificationManager.IMPORTANCE_LOW)
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(chan)
         }
@@ -123,16 +128,11 @@ class LocationService : Service() {
     override fun onBind(i: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        // CLEANUP: Important to stop location requests to save battery
         fusedLocationClient.removeLocationUpdates(locationCallback)
-
-        // Optional: Mark tracking as inactive in Firestore when service is stopped
         val userId = auth.currentUser?.uid
         if (userId != null) {
             db.collection("users").document(userId).update("isTrackingActive", false)
         }
-
         super.onDestroy()
-        Log.d("LocationService", "Service Destroyed and Updates Stopped")
     }
 }

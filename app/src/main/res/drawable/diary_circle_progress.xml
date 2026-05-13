@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Background: Represents Calories Left (Green) -->
+    <!-- Background Layer: Represents Calories Left (Green) -->
     <item android:id="@android:id/background">
         <shape
             android:shape="ring"
-            android:innerRadiusRatio="2.5"
-            android:thickness="12dp"
+            android:innerRadiusRatio="3"
+            android:thickness="14dp"
             android:useLevel="false">
             <solid android:color="#4B8A34" />
         </shape>
     </item>
-    <!-- Progress: Represents Calories Logged (Red) -->
+    <!-- Progress Layer: Represents Calories Logged (Red) -->
     <item android:id="@android:id/progress">
         <rotate
             android:fromDegrees="270"
@@ -19,8 +19,8 @@
             android:pivotY="50%">
             <shape
                 android:shape="ring"
-                android:innerRadiusRatio="2.5"
-                android:thickness="12dp"
+                android:innerRadiusRatio="3"
+                android:thickness="14dp"
                 android:useLevel="true">
                 <solid android:color="#FF0000" />
             </shape>
