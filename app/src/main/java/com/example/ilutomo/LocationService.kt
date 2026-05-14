@@ -18,7 +18,7 @@ import com.google.firebase.firestore.FieldValue
 class LocationService : Service() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
-    private lateinit var locationCallback: LocationCallback
+    private var locationCallback: LocationCallback? = null
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
     private var accountType: String? = null
@@ -49,11 +49,6 @@ class LocationService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (auth.currentUser == null) {
-            stopSelf()
-            return START_NOT_STICKY
-        }
-
         createChannel()
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -65,6 +60,7 @@ class LocationService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
+        // IMPORTANT: Must call startForeground immediately if started via startForegroundService
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
@@ -75,6 +71,14 @@ class LocationService : Service() {
             }
         } catch (e: Exception) {
             Log.e("LocationService", "Failed to start foreground service: ${e.message}")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        if (auth.currentUser == null) {
+            stopForeground(true)
+            stopSelf()
+            return START_NOT_STICKY
         }
 
         requestUpdates()
@@ -88,9 +92,12 @@ class LocationService : Service() {
             .build()
 
         try {
-            fusedLocationClient.requestLocationUpdates(req, locationCallback, Looper.getMainLooper())
+            locationCallback?.let {
+                fusedLocationClient.requestLocationUpdates(req, it, Looper.getMainLooper())
+            }
         } catch (e: SecurityException) {
             Log.e("LocationService", "Permission denied: ${e.message}")
+            stopForeground(true)
             stopSelf()
         }
     }
@@ -98,7 +105,6 @@ class LocationService : Service() {
     private fun updateLocations(lat: Double, lng: Double) {
         val userId = auth.currentUser?.uid ?: return
 
-        // 1. Update Firestore (Common for both)
         val updates = hashMapOf(
             "latitude" to lat,
             "longitude" to lng,
@@ -107,7 +113,6 @@ class LocationService : Service() {
         )
         db.collection("users").document(userId).update(updates as Map<String, Any>)
 
-        // 2. Update Realtime DB if Business (So users can find closest store)
         if (accountType == "Business") {
             val rtdbUpdates = mapOf(
                 "latitude" to lat,
@@ -128,7 +133,7 @@ class LocationService : Service() {
     override fun onBind(i: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        fusedLocationClient.removeLocationUpdates(locationCallback)
+        locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
         val userId = auth.currentUser?.uid
         if (userId != null) {
             db.collection("users").document(userId).update("isTrackingActive", false)

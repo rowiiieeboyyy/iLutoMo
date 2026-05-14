@@ -18,6 +18,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ILutoMo">
 
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyAwv8XaP8Z0RL4xnDpOeEBtRaNGF2FK2vM" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true">

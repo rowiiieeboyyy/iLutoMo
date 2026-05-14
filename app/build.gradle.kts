@@ -1,7 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    id("com.google.gms.google-services")
+    alias(libs.plugins.google.services)
 }
 
 android {
@@ -24,7 +24,6 @@ android {
         }
     }
 
-    // Recommended for modern Android projects using Java 17 features
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -40,30 +39,28 @@ android {
 }
 
 dependencies {
-    // Firebase BOM (Ensures all Firebase libraries work together)
-    implementation(platform("com.google.firebase:firebase-bom:33.1.0"))
-    implementation("com.google.firebase:firebase-auth-ktx")
-    implementation("com.google.firebase:firebase-firestore-ktx")
-    implementation("com.google.firebase:firebase-database-ktx")
-    implementation("com.google.firebase:firebase-storage-ktx")
+    // Firebase
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
+    implementation(libs.firebase.database)
+    implementation(libs.firebase.storage)
     implementation("com.google.firebase:firebase-analytics-ktx")
-    // Google Sign-In Library
+
+    // Google Services
     implementation("com.google.android.gms:play-services-auth:21.1.1")
-
-    // Location library (Critical for FusedLocationProviderClient)
     implementation("com.google.android.gms:play-services-location:21.2.0")
+    implementation(libs.play.services.maps)
 
-    // Image loading for Pantry/Recipes
+    // Image loading
     implementation("com.github.bumptech.glide:glide:4.16.0")
 
-    // AndroidX & Material (Using version catalog aliases)
+    // AndroidX & Material
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
-
-    // Lifecycle components (Helps manage background service states)
     implementation("androidx.lifecycle:lifecycle-service:2.7.0")
 
     testImplementation(libs.junit)

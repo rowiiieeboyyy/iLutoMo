@@ -150,6 +150,31 @@
                     android:text="Real-time GPS is active to detect closest stores."
                     android:textColor="#757575"
                     android:textSize="12sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="8dp">
+
+                    <TextView
+                        android:id="@+id/etLat"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textColor="#757575"
+                        android:textSize="11sp"
+                        android:text="Lat: 0.0" />
+
+                    <TextView
+                        android:id="@+id/etLng"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textColor="#757575"
+                        android:textSize="11sp"
+                        android:text="Lng: 0.0" />
+                </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
