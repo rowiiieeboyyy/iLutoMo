@@ -6,9 +6,11 @@ import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
 import android.util.TypedValue
+import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.example.ilutomo.databinding.ActivityRecipeDetailsBinding
 import com.google.firebase.auth.FirebaseAuth
@@ -24,7 +26,9 @@ class RecipeDetailsActivity : AppCompatActivity() {
     private val auth = FirebaseAuth.getInstance()
 
     private val allStoreItems = mutableListOf<InventoryItem>()
+    private val currentPantryItems = mutableListOf<PantryIngredient>()
     private var currentRecipe: Recipe? = null
+    private var userMaxBudget: Double = 0.0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,7 +62,36 @@ class RecipeDetailsActivity : AppCompatActivity() {
         binding.btnSaveRecipe.setOnClickListener { saveRecipeToMyList(recipe) }
         binding.btnLogToDiary.setOnClickListener { logRecipeToDiary(recipe) }
 
-        loadBusinessData(recipe)
+        fetchUserPreferences(recipe)
+    }
+    
+    private fun fetchUserPreferences(recipe: Recipe) {
+        val uid = auth.currentUser?.uid ?: return
+        database.child("Users").child(uid).child("Preferences").get().addOnSuccessListener { snapshot ->
+            if (snapshot.exists()) {
+                userMaxBudget = snapshot.child("budget_max").value?.toString()?.toDoubleOrNull() ?: 1000.0
+            }
+            loadPantryAndBusinessData(recipe)
+        }.addOnFailureListener {
+            loadPantryAndBusinessData(recipe)
+        }
+    }
+
+    private fun loadPantryAndBusinessData(recipe: Recipe) {
+        val uid = auth.currentUser?.uid ?: return
+        // Fetch Pantry first to enable unit awareness in optimization
+        database.child("Users").child(uid).child("Pantry").get().addOnSuccessListener { pantrySnap ->
+            currentPantryItems.clear()
+            pantrySnap.children.forEach { child ->
+                child.getValue(PantryIngredient::class.java)?.let { 
+                    it.id = child.key ?: ""
+                    currentPantryItems.add(it) 
+                }
+            }
+            loadBusinessData(recipe)
+        }.addOnFailureListener {
+            loadBusinessData(recipe)
+        }
     }
 
     private fun updateServingUI() {
@@ -82,7 +115,7 @@ class RecipeDetailsActivity : AppCompatActivity() {
                                         ?: itemSnap.child("itemName").value?.toString() ?: ""
                                     ingredient = itemSnap.child("ingredient").value?.toString() ?: ""
                                     ingredientTag = itemSnap.child("ingredientTag").value?.toString() ?: ""
-                                    itemGrade = itemSnap.child("itemGrade").value?.toString() ?: "Budget"
+                                    itemGrade = itemSnap.child("itemGrade").value?.toString() ?: ""
                                     size = itemSnap.child("size").value?.toString() ?: ""
                                     img = itemSnap.child("img").value?.toString()
                                         ?: itemSnap.child("imageUrl").value?.toString() ?: ""
@@ -112,13 +145,6 @@ class RecipeDetailsActivity : AppCompatActivity() {
 
         binding.tvDetailPrepTime.text = "🕒 ${recipe.totalTime} mins"
 
-        val activeTags = recipe.tasteProfile.filter { it.value }.keys
-        binding.tvDetailTags.text = if (activeTags.isNotEmpty()) {
-            "🏷️ ${activeTags.joinToString(", ")}"
-        } else {
-            "🏷️ ${recipe.category}"
-        }
-
         val imageResId = resources.getIdentifier(recipe.imageResourceName, "drawable", packageName)
         binding.ivRecipeDetailImage.setImageResource(if (imageResId != 0) imageResId else R.drawable.placeholder_food)
 
@@ -130,37 +156,55 @@ class RecipeDetailsActivity : AppCompatActivity() {
         binding.tvDetailSodium.text = "${(macros["Sodium"] ?: 0) * multiplier}mg"
 
         binding.llIngredientsList.removeAllViews()
-        var estimatedTotalPrice = 0.0
+        
+        // UNIT AWARE GREEDY OPTIMIZATION
+        val pool = PriceCalculator.buildAvailablePool(currentPantryItems)
+        val (incrementalCost, fitsBudget, selections) = PriceCalculator.performGreedyOptimization(recipe, allStoreItems, multiplier, userMaxBudget, pool)
 
         recipe.ingredients?.forEach { (name, rawAmount) ->
             val amountStr = rawAmount.toString()
             val scaledAmount = scaleAmount(amountStr, multiplier)
 
-            val cheapestItem = PriceCalculator.findCheapestMatch(name, allStoreItems)
+            val selectedItem = selections[name]
 
             val priceText: String
-            if (cheapestItem != null) {
-                val orderCount = PriceCalculator.calculateOrderCount(amountStr, cheapestItem.size, multiplier)
-                val cost = cheapestItem.price * orderCount
-
-                val quantityText = if (orderCount > 1) " (x$orderCount)" else ""
-                val sizeText = if (cheapestItem.size.isNotEmpty()) " [${cheapestItem.size}]" else ""
-                priceText = " - ₱${String.format("%.2f", cost)} (${cheapestItem.name}$sizeText)$quantityText"
-                estimatedTotalPrice += cost
+            if (selectedItem != null) {
+                val tag = selectedItem.ingredientTag.lowercase().trim()
+                val needed = PriceCalculator.extractNumericValue(amountStr) * multiplier
+                val availInPool = pool[tag] ?: 0.0
+                
+                if (availInPool >= needed) {
+                    priceText = " - FREE (Using leftovers)"
+                } else {
+                    val gap = needed - availInPool
+                    val orderCount = ceil(gap / PriceCalculator.extractNumericValue(selectedItem.size)).toInt().coerceAtLeast(1)
+                    val cost = selectedItem.price * orderCount
+                    val sizeText = if (selectedItem.size.isNotEmpty()) " [${selectedItem.size}]" else ""
+                    val gradeText = if (selectedItem.getInferredGrade() != "Standard") " <${selectedItem.getInferredGrade()}>" else ""
+                    priceText = " - ₱${String.format("%.2f", cost)} (${selectedItem.name}$sizeText)$gradeText"
+                }
             } else {
                 priceText = " - Not Available"
             }
 
             val tvName = TextView(this).apply {
                 text = "• $name ($scaledAmount)$priceText"
-                setTextColor(if (cheapestItem != null) Color.BLACK else Color.RED)
+                setTextColor(if (selectedItem != null) Color.BLACK else Color.RED)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                 setPadding(0, 8, 0, 8)
             }
             binding.llIngredientsList.addView(tvName)
         }
 
-        binding.tvDetailPrice.text = "₱${String.format("%.2f", estimatedTotalPrice)}"
+        binding.tvDetailPrice.text = "₱${String.format("%.2f", incrementalCost)}"
+        
+        if (!fitsBudget && userMaxBudget > 0) {
+            binding.tvBudgetWarning.visibility = View.VISIBLE
+            binding.tvBudgetWarning.text = "Budget Too Low: Incremental cost (₱${String.format("%.2f", incrementalCost)}) exceeds your ₱$userMaxBudget budget."
+        } else {
+            binding.tvBudgetWarning.visibility = View.GONE
+        }
+        
         binding.tvStepsList.text = recipe.steps?.mapIndexed { i, s -> "${i + 1}. $s" }?.joinToString("\n\n") ?: "No cooking steps provided."
     }
 
@@ -198,95 +242,80 @@ class RecipeDetailsActivity : AppCompatActivity() {
 
     private fun addToPantry(recipe: Recipe) {
         val uid = auth.currentUser?.uid ?: return
-        val pantryRef = database.child("Users").child(uid).child("Pantry")
         val multiplier = recipe.servings
+        
+        val pool = PriceCalculator.buildAvailablePool(currentPantryItems)
+        val optimization = PriceCalculator.performGreedyOptimization(recipe, allStoreItems, multiplier, userMaxBudget, pool)
+        val incrementalCost = optimization.first
+        val fitsBudget = optimization.second
+        val selections = optimization.third
+        
+        if (!fitsBudget && userMaxBudget > 0) {
+            showBudgetLowError(incrementalCost)
+            return
+        }
 
-        pantryRef.get().addOnSuccessListener { snapshot ->
-            val updates = mutableMapOf<String, Any?>()
+        val pantryRef = database.child("Users").child(uid).child("Pantry")
+        val updates = mutableMapOf<String, Any?>()
+        
+        val runningPool = pool.toMutableMap()
 
-            val currentPantryItems = mutableMapOf<String, PantryIngredient>()
-            snapshot.children.forEach { child ->
-                child.getValue(PantryIngredient::class.java)?.let {
-                    it.id = child.key ?: ""
-                    val tag = it.ingredientTag.lowercase().trim()
-                    if (tag.isNotEmpty()) {
-                        currentPantryItems[tag] = it
-                    }
-                }
+        recipe.ingredients?.forEach { (name, amount) ->
+            val selectedItem = selections[name] ?: return@forEach
+            val amountStr = amount.toString()
+            val volumeNeededNow = PriceCalculator.extractNumericValue(amountStr) * multiplier
+            val standardTag = selectedItem.ingredientTag.lowercase().trim()
+            
+            val unitSize = PriceCalculator.extractNumericValue(selectedItem.size)
+            if (unitSize <= 0) return@forEach
+
+            val availableNow = runningPool[standardTag] ?: 0.0
+            
+            val extraPacksNeeded: Int
+            val costForThisRecipe: Double
+            
+            if (availableNow >= volumeNeededNow) {
+                extraPacksNeeded = 0
+                costForThisRecipe = 0.0
+                runningPool[standardTag] = availableNow - volumeNeededNow
+            } else {
+                val gap = volumeNeededNow - availableNow
+                extraPacksNeeded = ceil(gap / unitSize).toInt().coerceAtLeast(1)
+                costForThisRecipe = selectedItem.price * extraPacksNeeded
+                runningPool[standardTag] = (availableNow + (extraPacksNeeded * unitSize)) - volumeNeededNow
             }
 
-            recipe.ingredients?.forEach { (name, amount) ->
-                val cheapestItem = PriceCalculator.findCheapestMatch(name, allStoreItems) ?: return@forEach
-                val amountStr = amount.toString()
+            val key = pantryRef.push().key ?: return@forEach
+            val pantryItem = mapOf(
+                "id" to key,
+                "name" to selectedItem.name,
+                "amount" to scaleAmount(amountStr, multiplier),
+                "recipeTitle" to recipe.title,
+                "isChecked" to true,
+                "count" to extraPacksNeeded,
+                "price" to costForThisRecipe,
+                "size" to selectedItem.size,
+                "imageUrl" to selectedItem.getDisplayImg(),
+                "ingredientTag" to selectedItem.ingredientTag,
+                "itemGrade" to selectedItem.getInferredGrade()
+            )
+            updates[key] = pantryItem
+        }
 
-                val standardTag = cheapestItem.ingredient.lowercase().trim()
-                val existing = currentPantryItems[standardTag]
-
-                if (existing != null) {
-                    val unitSize = PriceCalculator.extractNumericValue(existing.size)
-                    if (unitSize <= 0) return@forEach
-
-                    val totalVolumePurchased = unitSize * existing.count
-                    val volumeAlreadyNeeded = PriceCalculator.extractNumericValue(existing.amount)
-                    val volumeAvailable = (totalVolumePurchased - volumeAlreadyNeeded).coerceAtLeast(0.0)
-
-                    val volumeNeededNow = PriceCalculator.extractNumericValue(amountStr) * multiplier
-
-                    if (volumeAvailable >= volumeNeededNow) {
-                        val newTotalAmount = volumeAlreadyNeeded + volumeNeededNow
-                        val unit = extractUnit(existing.amount)
-                        updates["${existing.id}/amount"] = "${newTotalAmount.toInt()}${unit}"
-                    } else {
-                        val gap = volumeNeededNow - volumeAvailable
-                        val extraPacks = ceil(gap / unitSize).toInt().coerceAtLeast(1)
-
-                        val newCount = existing.count + extraPacks
-                        val newPrice = existing.price + (cheapestItem.price * extraPacks)
-                        val newTotalAmount = volumeAlreadyNeeded + volumeNeededNow
-                        val unit = extractUnit(existing.amount)
-
-                        updates["${existing.id}/count"] = newCount
-                        updates["${existing.id}/price"] = newPrice
-                        updates["${existing.id}/amount"] = "${newTotalAmount.toInt()}${unit}"
-                    }
-                } else {
-                    val key = pantryRef.push().key ?: return@forEach
-                    val orderCount = PriceCalculator.calculateOrderCount(amountStr, cheapestItem.size, multiplier)
-                    val linePrice = cheapestItem.price * orderCount
-
-                    val pantryItem = mapOf(
-                        "id" to key,
-                        "name" to cheapestItem.name,
-                        "amount" to scaleAmount(amountStr, multiplier),
-                        "recipeTitle" to recipe.title,
-                        "isChecked" to true,
-                        "count" to orderCount,
-                        "price" to linePrice,
-                        "size" to cheapestItem.size,
-                        "imageUrl" to cheapestItem.img,
-                        "ingredientTag" to cheapestItem.ingredient
-                    )
-                    updates[key] = pantryItem
-
-                    val newItem = PantryIngredient(
-                        id = key,
-                        name = cheapestItem.name,
-                        amount = scaleAmount(amountStr, multiplier),
-                        count = orderCount,
-                        price = linePrice,
-                        size = cheapestItem.size,
-                        ingredientTag = cheapestItem.ingredient
-                    )
-                    currentPantryItems[standardTag] = newItem
-                }
-            }
-
-            if (updates.isNotEmpty()) {
-                pantryRef.updateChildren(updates).addOnSuccessListener {
-                    Toast.makeText(this, "Optimized items added to Pantry!", Toast.LENGTH_SHORT).show()
-                }
+        if (updates.isNotEmpty()) {
+            pantryRef.updateChildren(updates).addOnSuccessListener {
+                Toast.makeText(this, "Recipe added to Pantry with Unit Awareness!", Toast.LENGTH_SHORT).show()
+                startActivity(Intent(this, PantryActivity::class.java))
             }
         }
+    }
+    
+    private fun showBudgetLowError(optimizedCost: Double) {
+        AlertDialog.Builder(this)
+            .setTitle("Budget Too Low")
+            .setMessage("Even with budget-friendly alternatives and shared ingredients (₱${String.format("%.2f", optimizedCost)}), this recipe exceeds your budget of ₱$userMaxBudget.")
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun extractUnit(input: String): String {

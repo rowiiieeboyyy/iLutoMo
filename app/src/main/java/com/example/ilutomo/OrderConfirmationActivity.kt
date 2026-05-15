@@ -9,9 +9,10 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
+import com.bumptech.glide.Glide
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
-import com.google.firebase.firestore.FirebaseFirestore // Added for Admin Dashboard
+import com.google.firebase.firestore.FirebaseFirestore
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -26,7 +27,7 @@ class OrderConfirmationActivity : AppCompatActivity() {
 
     private val database = FirebaseDatabase.getInstance().reference
     private val auth = FirebaseAuth.getInstance()
-    private val firestore = FirebaseFirestore.getInstance() // Initialize Firestore
+    private val firestore = FirebaseFirestore.getInstance()
 
     private var storeName: String = ""
     private var storeUid: String = ""
@@ -95,16 +96,26 @@ class OrderConfirmationActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(16, 16, 16, 16)
         }
-        inner.addView(View(this).apply {
+        
+        // FIXED: Replaced View with ImageView and loaded the ingredient photo using Glide
+        val imageView = ImageView(this).apply {
             layoutParams = LinearLayout.LayoutParams(-1, 180)
+            scaleType = ImageView.ScaleType.CENTER_CROP
             setBackgroundColor(Color.parseColor("#F5F5F5"))
-        })
+        }
+        if (!item.imageUrl.isNullOrEmpty()) {
+            Glide.with(this).load(item.imageUrl).placeholder(R.drawable.placeholder_food).into(imageView)
+        } else {
+            imageView.setImageResource(R.drawable.placeholder_food)
+        }
+        inner.addView(imageView)
 
         inner.addView(TextView(this).apply {
             val sizeText = if (!item.size.isNullOrEmpty()) " (${item.size})" else ""
             text = "${item.name} x${item.count}$sizeText"
             textSize = 14f
             setTypeface(null, Typeface.BOLD)
+            setPadding(0, 8, 0, 0)
         })
 
         inner.addView(TextView(this).apply {
@@ -144,7 +155,6 @@ class OrderConfirmationActivity : AppCompatActivity() {
         updates["Users/$uid/MyOrders/$orderId"] = orderData
 
         database.updateChildren(updates).addOnSuccessListener {
-            // LOG TO FIRESTORE FOR PHP ADMIN DASHBOARD
             logActionToFirestore(
                 "Placed Order",
                 "Ordered ${selectedItems.size} items from $storeName | Total: ₱${"%.2f".format(totalPrice)}"
@@ -166,7 +176,6 @@ class OrderConfirmationActivity : AppCompatActivity() {
         }
     }
 
-    // Helper function to send logs to the PHP Dashboard
     private fun logActionToFirestore(action: String, details: String) {
         val userEmail = auth.currentUser?.email ?: "Guest User"
         val log = hashMapOf(

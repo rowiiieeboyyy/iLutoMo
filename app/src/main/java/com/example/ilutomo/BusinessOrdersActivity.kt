@@ -7,12 +7,15 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.example.ilutomo.databinding.ActivityBusinessOrdersBinding
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
@@ -184,6 +187,7 @@ class BusinessOrdersActivity : AppCompatActivity() {
             val tvStatus: TextView = view.findViewById(R.id.tvOrderStatus)
             val tvDate: TextView = view.findViewById(R.id.tvOrderDate)
             val tvDetails: TextView = view.findViewById(R.id.tvOrderDetails)
+            val llItemPhotos: LinearLayout = view.findViewById(R.id.llItemPhotos)
             val btnAccept: Button = view.findViewById(R.id.btnAcceptOrder)
             val btnDecline: Button = view.findViewById(R.id.btnDeclineOrder)
             val btnComplete: Button = view.findViewById(R.id.btnCompleteOrder)
@@ -205,9 +209,31 @@ class BusinessOrdersActivity : AppCompatActivity() {
             val pickup = if (order.pickupTime.isNullOrEmpty()) "ASAP" else order.pickupTime
             holder.tvDate.text = "Placed: $orderDate\nPickup: $pickup"
 
-            // UPDATED: Removed (amount) and added xCount logic so the store knows exact quantities
             holder.tvDetails.text = order.items.joinToString("\n") {
                 "• ${it.name} x${it.count}"
+            }
+            
+            // Render Item Photos
+            holder.llItemPhotos.removeAllViews()
+            order.items.forEach { item ->
+                val imageView = ImageView(holder.itemView.context).apply {
+                    val size = (50 * holder.itemView.context.resources.displayMetrics.density).toInt()
+                    layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                        setMargins(0, 0, 16, 0)
+                    }
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    setBackgroundColor(Color.parseColor("#F5F5F5"))
+                }
+                
+                if (!item.imageUrl.isNullOrEmpty()) {
+                    Glide.with(holder.itemView.context)
+                        .load(item.imageUrl)
+                        .placeholder(R.drawable.placeholder_food)
+                        .into(imageView)
+                } else {
+                    imageView.setImageResource(R.drawable.placeholder_food)
+                }
+                holder.llItemPhotos.addView(imageView)
             }
 
             holder.btnAccept.visibility = View.GONE

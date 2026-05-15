@@ -66,22 +66,24 @@
                 android:padding="24dp">
 
                 <TextView
+                    android:id="@+id/tvRecipeTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Selected Recipe: Pork Adobo"
+                    android:text="Selected Recipe"
                     android:textColor="#1B3022"
                     android:textSize="20sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="16dp" />
 
                 <TextView
+                    android:id="@+id/tvRecipeSteps"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:textColor="#1B3022"
                     android:textSize="17sp"
                     android:textStyle="bold"
                     android:lineSpacingExtra="6dp"
-                    android:text="1. In a bowl, combine pork, soy sauce, garlic, bay leaves, and peppercorns. Marinate 30 minutes (or up to overnight).\n\n2. Transfer everything (including marinade) to a pot. Add water.\n\n3. Bring to a boil, then lower heat and simmer uncovered for 30–40 minutes until pork is tender.\n\n4. Add vinegar. Do NOT stir. Simmer 10–15 minutes.\n\n5. Remove pork pieces. Heat oil in a pan and lightly fry pork until browned (optional but traditional).\n\n6. Return pork to sauce. Add sugar if using. Simmer 5–10 minutes until sauce slightly thickens.\n\n7. Adjust taste (salt/soy/vinegar balance)." />
+                    android:text="No steps provided." />
             </LinearLayout>
         </ScrollView>
     </androidx.cardview.widget.CardView>

@@ -3,6 +3,7 @@ package com.example.ilutomo
 import android.content.Intent
 import android.os.Bundle
 import android.widget.ImageView
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.bottomnavigation.BottomNavigationView
 
@@ -11,13 +12,25 @@ class CookingStepsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_cooking_steps)
 
-        // 1. Back Arrow Logic
+        val recipe = intent.getSerializableExtra("RECIPE") as? Recipe
+        
+        // 1. UI Population
+        val tvTitle = findViewById<TextView>(R.id.tvRecipeTitle)
+        val tvSteps = findViewById<TextView>(R.id.tvRecipeSteps)
+        
+        if (recipe != null) {
+            tvTitle.text = "Steps for ${recipe.title}"
+            val stepsText = recipe.steps?.mapIndexed { i, s -> "${i + 1}. $s" }?.joinToString("\n\n")
+            tvSteps.text = stepsText ?: "No steps provided for this recipe."
+        }
+
+        // 2. Back Arrow Logic
         val btnBack = findViewById<ImageView>(R.id.btnBack)
         btnBack?.setOnClickListener {
             finish()
         }
 
-        // 2. Bottom Navigation Logic
+        // 3. Bottom Navigation Logic
         val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNav)
         bottomNav.selectedItemId = R.id.nav_recipes
 
@@ -29,8 +42,7 @@ class CookingStepsActivity : AppCompatActivity() {
                     true
                 }
                 R.id.nav_recipes -> {
-                    startActivity(Intent(this, RecipesActivity::class.java))
-                    finish()
+                    // Already here, but reset if needed
                     true
                 }
                 R.id.nav_pantry -> {

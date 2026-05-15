@@ -121,11 +121,11 @@ class HomeActivity : AppCompatActivity() {
                                     cal += factor * toFilterDouble(lib.child("cal").value, 0.0)
 
                                     // Pricing Logic: Use calculation logic from details page for consistency
-                                    val cheapestItem = PriceCalculator.findCheapestMatch(name, businessInventory)
+                                    val standardItem = PriceCalculator.findStandardMatch(name, businessInventory)
 
-                                    if (cheapestItem != null) {
-                                        val orderCount = PriceCalculator.calculateOrderCount(amountStr, cheapestItem.size, 1)
-                                        totalPrice += cheapestItem.price * orderCount
+                                    if (standardItem != null) {
+                                        val orderCount = PriceCalculator.calculateOrderCount(amountStr, standardItem.size, 1)
+                                        totalPrice += standardItem.price * orderCount
                                     } else {
                                         // Fallback to library standard price
                                         isMissing = true
@@ -166,13 +166,13 @@ class HomeActivity : AppCompatActivity() {
             val s = r.calculatedMacros["Sugar"]?.toDouble() ?: 0.0
             val cal = r.calculatedMacros["Calories"]?.toDouble() ?: 0.0
 
-            val matchesBudget = r.calculatedPrice in budgetMin..budgetMax
+            // Removed budget filtering from Homepage as requested
             val matchesMacros = (p >= proteinMin && p <= proteinMax) && (c <= carbsMax) && (s <= sugarMax) && (cal <= caloriesMax)
             val matchesSearch = if (searchQuery.isEmpty()) true else r.title.contains(searchQuery, true)
             val matchesTime = if (isShortPrepActive) r.totalTime <= 20 else true
             val matchesTaste = if (selectedHomepageTaste.isNotEmpty()) r.tasteProfile[selectedHomepageTaste] == true else true
 
-            matchesBudget && matchesMacros && matchesSearch && matchesTime && matchesTaste
+            matchesMacros && matchesSearch && matchesTime && matchesTaste
         }
 
         filteredList.addAll(baseFiltered)
@@ -204,7 +204,7 @@ class HomeActivity : AppCompatActivity() {
                     }
                     loadRecipes()
                 }
-                override fun onCancelled(e: DatabaseError) {}
+                override fun onCancelled(error: DatabaseError) {}
             })
     }
 
@@ -236,6 +236,7 @@ class HomeActivity : AppCompatActivity() {
                                 price = inv.child("price").value?.toString()?.toDoubleOrNull() ?: 0.0
                                 stock = inv.child("stock").value?.toString()?.toIntOrNull() ?: 0
                                 size = inv.child("size").value?.toString() ?: ""
+                                itemGrade = inv.child("itemGrade").value?.toString() ?: "Standard"
                             }
                             businessInventory.add(itm)
                         } catch (e: Exception) {}

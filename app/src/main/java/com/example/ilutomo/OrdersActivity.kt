@@ -1,18 +1,17 @@
 package com.example.ilutomo
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.ImageButton
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
@@ -113,10 +112,8 @@ class OrdersActivity : AppCompatActivity() {
             val tvDetails: TextView = view.findViewById(R.id.tvOrderDetails)
             val tvTotal: TextView = view.findViewById(R.id.tvOrderTotal)
             val tvPickup: TextView = view.findViewById(R.id.tvOrderPickup)
-
-            // Link to the separate time field from XML
             val tvPickupTime: TextView = view.findViewById(R.id.tvOrderPickupTime)
-
+            val llItemPhotos: LinearLayout = view.findViewById(R.id.llItemPhotos)
             val btnCancel: Button = view.findViewById(R.id.btnCancelOrder)
         }
 
@@ -137,10 +134,31 @@ class OrdersActivity : AppCompatActivity() {
             holder.tvDetails.text = "Items: ${order.items.joinToString(", ") { it.name }}"
             holder.tvTotal.text = String.format("Total: ₱%.2f", order.totalAmount)
 
-            // --- FIXED BINDING ---
-            // Separate the Store and Time so they don't appear on the same line
             holder.tvPickup.text = "Store: ${order.businessName}"
             holder.tvPickupTime.text = "Pickup Time: ${order.pickupTime}"
+
+            // Render Item Photos
+            holder.llItemPhotos.removeAllViews()
+            order.items.forEach { item ->
+                val imageView = ImageView(holder.itemView.context).apply {
+                    val size = (50 * holder.itemView.context.resources.displayMetrics.density).toInt()
+                    layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                        setMargins(0, 0, 16, 0)
+                    }
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    setBackgroundColor(Color.parseColor("#F5F5F5"))
+                }
+                
+                if (!item.imageUrl.isNullOrEmpty()) {
+                    Glide.with(holder.itemView.context)
+                        .load(item.imageUrl)
+                        .placeholder(R.drawable.placeholder_food)
+                        .into(imageView)
+                } else {
+                    imageView.setImageResource(R.drawable.placeholder_food)
+                }
+                holder.llItemPhotos.addView(imageView)
+            }
 
             if (order.status == "Pending") {
                 holder.btnCancel.visibility = View.VISIBLE

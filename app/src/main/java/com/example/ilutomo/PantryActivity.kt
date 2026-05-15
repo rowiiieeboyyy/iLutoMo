@@ -35,11 +35,14 @@ class PantryActivity : AppCompatActivity() {
     private val database = FirebaseDatabase.getInstance().reference
     private val auth = FirebaseAuth.getInstance()
     private var pantryIngredients = mutableListOf<PantryIngredient>()
+    private var outOfBudgetRecipes = mutableSetOf<String>()
     private lateinit var pantryAdapter: PantryAdapter
     private lateinit var fusedLocationClient: FusedLocationProviderClient
+    
+    private var userMaxBudget = 1000.0
 
     sealed class PantryListItem {
-        data class Header(val title: String) : PantryListItem()
+        data class Header(val title: String, val isOutOfBudget: Boolean = false) : PantryListItem()
         data class Ingredient(val item: PantryIngredient) : PantryListItem()
     }
 
@@ -68,8 +71,15 @@ class PantryActivity : AppCompatActivity() {
         btnGetIngredient.setOnClickListener { fetchStoresAndShowDialog() }
         btnClearPantry.setOnClickListener { showClearPantryConfirmation() }
 
-        loadPantryIngredients()
-        checkBudgetAndAdjust()
+        fetchPreferences()
+    }
+    
+    private fun fetchPreferences() {
+        val uid = auth.currentUser?.uid ?: return
+        database.child("Users").child(uid).child("Preferences").get().addOnSuccessListener { s ->
+            userMaxBudget = s.child("budget_max").value?.toString()?.toDoubleOrNull() ?: 1000.0
+            loadPantryIngredients()
+        }.addOnFailureListener { loadPantryIngredients() }
     }
 
     private fun loadPantryIngredients() {
@@ -85,9 +95,11 @@ class PantryActivity : AppCompatActivity() {
                     groupedMap.getOrPut(ing.recipeTitle) { mutableListOf() }.add(ing)
                 }
                 
+                calculateOutOfBudgetRecipes(groupedMap)
+                
                 val listItems = mutableListOf<PantryListItem>()
                 for ((title, items) in groupedMap) {
-                    listItems.add(PantryListItem.Header(title))
+                    listItems.add(PantryListItem.Header(title, outOfBudgetRecipes.contains(title)))
                     items.forEach { listItems.add(PantryListItem.Ingredient(it)) }
                 }
                 
@@ -98,112 +110,46 @@ class PantryActivity : AppCompatActivity() {
         })
     }
 
-    private fun checkBudgetAndAdjust() {
-        val uid = auth.currentUser?.uid ?: return
-        database.child("Users").child(uid).child("Preferences").get().addOnSuccessListener { prefSnap ->
-            val budgetMax = prefSnap.child("budget_max").value?.toString()?.toDoubleOrNull() ?: 1000.0
-            database.child("Users").child(uid).child("Pantry").addListenerForSingleValueEvent(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val currentItems = mutableListOf<PantryIngredient>()
-                    var currentTotal = 0.0
-                    for (child in snapshot.children) {
-                        val item = child.getValue(PantryIngredient::class.java) ?: continue
-                        if (item.isChecked) {
-                            currentTotal += item.price
-                            currentItems.add(item)
-                        }
-                    }
-
-                    if (currentTotal > budgetMax) {
-                        Toast.makeText(this@PantryActivity, "Over budget! Adjusting items...", Toast.LENGTH_LONG).show()
-                        findMinimalAdjustments(currentItems, currentTotal, budgetMax)
-                    }
-                }
-                override fun onCancelled(error: DatabaseError) {}
-            })
+    private fun calculateOutOfBudgetRecipes(groupedMap: Map<String, List<PantryIngredient>>) {
+        outOfBudgetRecipes.clear()
+        
+        // DISTRIBUTED COST LOGIC for per-recipe budget awareness (Unit Awareness)
+        // This distributes the cost of shared units across recipes that use them.
+        
+        val tagToTotalVolumeNeeded = mutableMapOf<String, Double>()
+        val tagToTotalCostPaid = mutableMapOf<String, Double>()
+        
+        // 1. Sum up total volume needed and total cost paid per ingredient tag across the entire pantry
+        pantryIngredients.forEach { ing ->
+            val tag = ing.ingredientTag.lowercase().trim()
+            val volume = PriceCalculator.extractNumericValue(ing.amount)
+            tagToTotalVolumeNeeded[tag] = (tagToTotalVolumeNeeded[tag] ?: 0.0) + volume
+            tagToTotalCostPaid[tag] = (tagToTotalCostPaid[tag] ?: 0.0) + ing.price
         }
-    }
 
-    private fun findMinimalAdjustments(items: List<PantryIngredient>, currentTotal: Double, budget: Double) {
-        val shortage = currentTotal - budget
-        database.child("Businesses").addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(bizSnapshot: DataSnapshot) {
-                val swapOptionsMap = mutableMapOf<String, List<InventoryItem>>()
-                items.forEach { item ->
-                    val tag = if (item.ingredientTag.isNotEmpty()) item.ingredientTag else item.name
-                    val options = mutableListOf<InventoryItem>()
-                    for (biz in bizSnapshot.children) {
-                        for (inv in biz.child("inventory").children) {
-                            val invItem = inv.getValue(InventoryItem::class.java) ?: continue
-                            if (invItem.ingredient.equals(tag, true) || invItem.ingredientTag.equals(tag, true)) {
-                                if (invItem.price * item.count < item.price) options.add(invItem)
-                            }
-                        }
-                    }
-                    swapOptionsMap[item.id] = options.sortedBy { it.price }
-                }
-
-                for (k in 1..items.size) {
-                    val result = findBestKCombination(items, swapOptionsMap, k, shortage)
-                    if (result != null) {
-                        applyAdjustments(result)
-                        return
-                    }
+        // 2. Determine "Fair Share" cost for each recipe by weighting cost by volume used
+        for ((title, ingredients) in groupedMap) {
+            var recipeDistributedCost = 0.0
+            
+            for (ing in ingredients) {
+                val tag = ing.ingredientTag.lowercase().trim()
+                val totalVolumeNeededForTag = tagToTotalVolumeNeeded[tag] ?: 0.0
+                val totalCostPaidForTag = tagToTotalCostPaid[tag] ?: 0.0
+                
+                if (totalVolumeNeededForTag > 0) {
+                    val myVolume = PriceCalculator.extractNumericValue(ing.amount)
+                    // My share is proportional to my usage of the total pool
+                    val myShare = (myVolume / totalVolumeNeededForTag) * totalCostPaidForTag
+                    recipeDistributedCost += myShare
                 }
             }
-            override fun onCancelled(error: DatabaseError) {}
-        })
-    }
-
-    private fun findBestKCombination(items: List<PantryIngredient>, swapMap: Map<String, List<InventoryItem>>, k: Int, shortage: Double): Map<PantryIngredient, InventoryItem>? {
-        val swapableItems = items.filter { swapMap[it.id]?.isNotEmpty() == true }
-        if (swapableItems.size < k) return null
-        val combinations = getCombinations(swapableItems, k)
-        for (combo in combinations) {
-            var totalSavings = 0.0
-            val selectedSwaps = mutableMapOf<PantryIngredient, InventoryItem>()
-            for (item in combo) {
-                val cheapest = swapMap[item.id]?.firstOrNull() ?: continue
-                totalSavings += (item.price - (cheapest.price * item.count))
-                selectedSwaps[item] = cheapest
-            }
-            if (totalSavings >= shortage) return selectedSwaps
-        }
-        return null
-    }
-
-    private fun <T> getCombinations(list: List<T>, k: Int): List<List<T>> {
-        val result = mutableListOf<List<T>>()
-        fun combine(start: Int, current: MutableList<T>) {
-            if (current.size == k) {
-                result.add(ArrayList(current))
-                return
-            }
-            for (i in start until list.size) {
-                current.add(list[i])
-                combine(i + 1, current)
-                current.removeAt(current.size - 1)
+            
+            // Check if THIS recipe's fair share exceeds the budget. 
+            // If it shares enough such that its distributed cost is low, it won't be red.
+            if (recipeDistributedCost > userMaxBudget && userMaxBudget > 0) {
+                outOfBudgetRecipes.add(title)
             }
         }
-        combine(0, mutableListOf())
-        return result
-    }
-
-    private fun applyAdjustments(adjustments: Map<PantryIngredient, InventoryItem>) {
-        val uid = auth.currentUser?.uid ?: return
-        val updates = mutableMapOf<String, Any?>()
-        adjustments.forEach { (old, new) ->
-            val totalNewPrice = old.count * new.price
-            updates["${old.id}/name"] = new.getDisplayName()
-            updates["${old.id}/brandName"] = new.name
-            updates["${old.id}/price"] = totalNewPrice
-            updates["${old.id}/size"] = new.size
-            updates["${old.id}/itemGrade"] = new.itemGrade
-            updates["${old.id}/imageUrl"] = new.getDisplayImg()
-            updates["${old.id}/ingredientTag"] = (if (old.ingredientTag.isEmpty()) old.name else old.ingredientTag)
-        }
-        database.child("Users").child(uid).child("Pantry").updateChildren(updates)
-        Toast.makeText(this, "Minimal adjustments applied to fit budget", Toast.LENGTH_SHORT).show()
     }
 
     private fun showAlternativesDialog(pantryItem: PantryIngredient) {
@@ -252,7 +198,7 @@ class PantryActivity : AppCompatActivity() {
             "price" to totalNewPrice,
             "size" to newItem.size,
             "imageUrl" to newItem.getDisplayImg(),
-            "itemGrade" to newItem.itemGrade,
+            "itemGrade" to newItem.getInferredGrade(),
             "ingredientTag" to (if (oldItem.ingredientTag.isEmpty()) oldItem.name else oldItem.ingredientTag)
         )
         database.child("Users").child(uid).child("Pantry").child(oldItem.id).updateChildren(updates)
@@ -298,6 +244,7 @@ class PantryActivity : AppCompatActivity() {
             total += it.price
         }
         tvTotalPrice.text = "Total Price: ₱${"%.2f".format(total)}"
+        tvTotalPrice.setTextColor(Color.BLACK)
     }
 
     private fun setupNavigation() {
@@ -352,7 +299,6 @@ class PantryActivity : AppCompatActivity() {
                         return
                     }
 
-                    // Sort by distance (Closest first)
                     storeList.sortBy { it.third }
 
                     val storeNamesWithDistance = storeList.map { 
@@ -427,13 +373,20 @@ class PantryActivity : AppCompatActivity() {
             val item = items[position]
             if (holder is HeaderViewHolder && item is PantryListItem.Header) {
                 holder.tvHeader.text = item.title
+                if (item.isOutOfBudget) {
+                    holder.ivError.visibility = View.VISIBLE
+                    holder.tvError.visibility = View.VISIBLE
+                } else {
+                    holder.ivError.visibility = View.GONE
+                    holder.tvError.visibility = View.GONE
+                }
             } else if (holder is ItemViewHolder && item is PantryListItem.Ingredient) {
                 val ing = item.item
                 holder.tvName.text = ing.name
                 holder.tvCount.text = ing.count.toString()
                 holder.tvDetails.text = "${ing.size} • ₱${"%.2f".format(ing.price)}"
                 
-                if (ing.imageUrl.isNotEmpty()) {
+                if (!ing.imageUrl.isNullOrEmpty()) {
                     Glide.with(holder.imageView.context).load(ing.imageUrl).placeholder(R.drawable.placeholder_food).into(holder.imageView)
                 } else {
                     holder.imageView.setImageResource(R.drawable.placeholder_food)
@@ -456,6 +409,8 @@ class PantryActivity : AppCompatActivity() {
 
         class HeaderViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val tvHeader: TextView = view.findViewById(R.id.tvPantryHeader)
+            val ivError: ImageView = view.findViewById(R.id.ivOutOfBudget)
+            val tvError: TextView = view.findViewById(R.id.tvOutOfBudget)
         }
 
         class ItemViewHolder(view: View) : RecyclerView.ViewHolder(view) {

@@ -68,6 +68,20 @@
             android:text="Items: Loading..."
             android:textSize="13sp"/>
 
+        <!-- Photo Container for Items -->
+        <HorizontalScrollView
+            android:id="@+id/hsvItemPhotos"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:scrollbars="none">
+            <LinearLayout
+                android:id="@+id/llItemPhotos"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

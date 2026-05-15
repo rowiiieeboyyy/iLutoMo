@@ -33,9 +33,12 @@ class RecipesActivity : AppCompatActivity() {
     private var currentRecipe: Recipe? = null
     private val ingredientLibrary = mutableMapOf<String, Map<String, Double>>()
     private val allStoreItems = mutableListOf<InventoryItem>()
+    private val currentPantryItems = mutableListOf<PantryIngredient>()
 
     private val auth = FirebaseAuth.getInstance()
     private val database = FirebaseDatabase.getInstance().reference
+    
+    private var userMaxBudget = 1000.0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,6 +61,7 @@ class RecipesActivity : AppCompatActivity() {
         rvAvailable.layoutManager = LinearLayoutManager(this)
         
         loadData()
+        fetchPreferences()
 
         btnPlus.setOnClickListener {
             currentRecipe?.let {
@@ -95,37 +99,63 @@ class RecipesActivity : AppCompatActivity() {
         }
         btnSteps.setOnClickListener {
             if (currentRecipe == null) Toast.makeText(this, "Select a recipe first!", Toast.LENGTH_SHORT).show()
-            else showStepsDialog(currentRecipe!!)
+            else {
+                val intent = Intent(this, CookingStepsActivity::class.java)
+                intent.putExtra("RECIPE", currentRecipe)
+                startActivity(intent)
+            }
         }
         btnAddToPantry.setOnClickListener { addToPantry() }
         btnLogToDiary.setOnClickListener { logRecipeToDiary() }
     }
 
+    private fun fetchPreferences() {
+        val uid = auth.currentUser?.uid ?: return
+        database.child("Users").child(uid).child("Preferences").get().addOnSuccessListener { s ->
+            userMaxBudget = s.child("budget_max").value?.toString()?.toDoubleOrNull() ?: 1000.0
+        }
+    }
+
     private fun loadData() {
-        // Load Store Inventory
-        database.child("Businesses").addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                allStoreItems.clear()
-                for (bizSnapshot in snapshot.children) {
-                    bizSnapshot.child("inventory").children.forEach { itemSnap ->
-                        try {
-                            val itm = InventoryItem().apply {
-                                id = itemSnap.key ?: ""
-                                name = itemSnap.child("name").value?.toString() ?: itemSnap.child("itemName").value?.toString() ?: ""
-                                ingredient = itemSnap.child("ingredient").value?.toString() ?: ""
-                                ingredientTag = itemSnap.child("ingredientTag").value?.toString() ?: ""
-                                price = itemSnap.child("price").value?.toString()?.toDoubleOrNull() ?: 0.0
-                                stock = itemSnap.child("stock").value?.toString()?.toIntOrNull() ?: 0
-                                size = itemSnap.child("size").value?.toString() ?: ""
-                            }
-                            allStoreItems.add(itm)
-                        } catch (e: Exception) {}
-                    }
+        val uid = auth.currentUser?.uid ?: return
+        
+        // Load Pantry first for unit awareness
+        database.child("Users").child(uid).child("Pantry").get().addOnSuccessListener { pantrySnap ->
+            currentPantryItems.clear()
+            pantrySnap.children.forEach { child ->
+                child.getValue(PantryIngredient::class.java)?.let {
+                    it.id = child.key ?: ""
+                    currentPantryItems.add(it)
                 }
-                loadIngredientLibrary()
             }
-            override fun onCancelled(error: DatabaseError) {}
-        })
+            
+            // Load Store Inventory
+            database.child("Businesses").addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    allStoreItems.clear()
+                    for (bizSnapshot in snapshot.children) {
+                        bizSnapshot.child("inventory").children.forEach { itemSnap ->
+                            try {
+                                val itm = InventoryItem().apply {
+                                    id = itemSnap.key ?: ""
+                                    name = itemSnap.child("name").value?.toString() ?: itemSnap.child("itemName").value?.toString() ?: ""
+                                    ingredient = itemSnap.child("ingredient").value?.toString() ?: ""
+                                    ingredientTag = itemSnap.child("ingredientTag").value?.toString() ?: ""
+                                    price = itemSnap.child("price").value?.toString()?.toDoubleOrNull() ?: 0.0
+                                    stock = itemSnap.child("stock").value?.toString()?.toIntOrNull() ?: 0
+                                    size = itemSnap.child("size").value?.toString() ?: ""
+                                    itemGrade = itemSnap.child("itemGrade").value?.toString() ?: ""
+                                    img = itemSnap.child("img").value?.toString() ?: itemSnap.child("imageUrl").value?.toString() ?: ""
+                                }
+                                allStoreItems.add(itm)
+                            } catch (e: Exception) {}
+                        }
+                    }
+                    loadIngredientLibrary()
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            })
+        }
     }
 
     private fun loadIngredientLibrary() {
@@ -215,20 +245,32 @@ class RecipesActivity : AppCompatActivity() {
         val recipe = currentRecipe ?: return
         val multiplier = recipe.servings
         val fullText = StringBuilder()
-        var estimatedTotalPrice = 0.0
+        
+        // UNIT AWARE GREEDY OPTIMIZATION
+        val pool = PriceCalculator.buildAvailablePool(currentPantryItems)
+        val (incrementalCost, fitsBudget, selections) = PriceCalculator.performGreedyOptimization(recipe, allStoreItems, multiplier, userMaxBudget, pool)
 
         currentIngredients.forEach { ing ->
             val scaledAmount = PriceCalculator.scaleAmount(ing.amount, multiplier)
+            val selectedItem = selections[ing.name]
             
-            val cheapestItem = PriceCalculator.findCheapestMatch(ing.name, allStoreItems)
             val priceText: String
-            
-            if (cheapestItem != null) {
-                val orderCount = PriceCalculator.calculateOrderCount(ing.amount, cheapestItem.size, multiplier)
-                val cost = cheapestItem.price * orderCount
-                val sizeText = if (cheapestItem.size.isNotEmpty()) " [${cheapestItem.size}]" else ""
-                priceText = " - ₱${String.format("%.2f", cost)} (${cheapestItem.name}$sizeText)"
-                if (ing.isChecked) estimatedTotalPrice += cost
+            if (selectedItem != null) {
+                val tag = selectedItem.ingredientTag.lowercase().trim()
+                val needed = PriceCalculator.extractNumericValue(ing.amount) * multiplier
+                val avail = pool[tag] ?: 0.0
+                
+                if (avail >= needed) {
+                    priceText = " - FREE (Using leftovers)"
+                } else {
+                    val gap = needed - avail
+                    val unitSize = PriceCalculator.extractNumericValue(selectedItem.size)
+                    val packs = if (unitSize > 0) ceil(gap / unitSize).toInt().coerceAtLeast(1) else 1
+                    val cost = selectedItem.price * packs
+                    val sizeText = if (selectedItem.size.isNotEmpty()) " [${selectedItem.size}]" else ""
+                    val gradeText = if (selectedItem.getInferredGrade() != "Standard") " <${selectedItem.getInferredGrade()}>" else ""
+                    priceText = " - ₱${String.format("%.2f", cost)} (${selectedItem.name}$sizeText)$gradeText"
+                }
             } else {
                 priceText = " - Not Available"
             }
@@ -236,20 +278,33 @@ class RecipesActivity : AppCompatActivity() {
             fullText.append("${ing.name} ($scaledAmount)$priceText\n\n")
         }
 
-        tvDetailPrice.text = "Total Price: ₱${String.format("%.2f", estimatedTotalPrice)}"
+        tvDetailPrice.text = "Incremental Total: ₱${String.format("%.2f", incrementalCost)}"
+        if (!fitsBudget && userMaxBudget > 0) tvDetailPrice.setTextColor(Color.RED)
+        else tvDetailPrice.setTextColor(Color.parseColor("#2D5A27"))
 
         val spannable = SpannableString(fullText.toString())
         var currentPos = 0
         currentIngredients.forEach { ing ->
             val scaledAmount = PriceCalculator.scaleAmount(ing.amount, multiplier)
-            val cheapestItem = PriceCalculator.findCheapestMatch(ing.name, allStoreItems)
+            val selectedItem = selections[ing.name]
             
             val segmentPricePart: String
-            if (cheapestItem != null) {
-                val orderCount = PriceCalculator.calculateOrderCount(ing.amount, cheapestItem.size, multiplier)
-                val cost = cheapestItem.price * orderCount
-                val sizeText = if (cheapestItem.size.isNotEmpty()) " [${cheapestItem.size}]" else ""
-                segmentPricePart = " - ₱${String.format("%.2f", cost)} (${cheapestItem.name}$sizeText)"
+            if (selectedItem != null) {
+                val tag = selectedItem.ingredientTag.lowercase().trim()
+                val needed = PriceCalculator.extractNumericValue(ing.amount) * multiplier
+                val avail = pool[tag] ?: 0.0
+                
+                if (avail >= needed) {
+                    segmentPricePart = " - FREE (Using leftovers)"
+                } else {
+                    val gap = needed - avail
+                    val unitSize = PriceCalculator.extractNumericValue(selectedItem.size)
+                    val packs = if (unitSize > 0) ceil(gap / unitSize).toInt().coerceAtLeast(1) else 1
+                    val cost = selectedItem.price * packs
+                    val sizeText = if (selectedItem.size.isNotEmpty()) " [${selectedItem.size}]" else ""
+                    val gradeText = if (selectedItem.getInferredGrade() != "Standard") " <${selectedItem.getInferredGrade()}>" else ""
+                    segmentPricePart = " - ₱${String.format("%.2f", cost)} (${selectedItem.name}$sizeText)$gradeText"
+                }
             } else {
                 segmentPricePart = " - Not Available"
             }
@@ -259,7 +314,7 @@ class RecipesActivity : AppCompatActivity() {
             if (!ing.isChecked) {
                 spannable.setSpan(StrikethroughSpan(), currentPos, currentPos + ing.name.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 spannable.setSpan(ForegroundColorSpan(Color.GRAY), currentPos, currentPos + ing.name.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            } else if (cheapestItem == null) {
+            } else if (selectedItem == null) {
                 spannable.setSpan(ForegroundColorSpan(Color.RED), currentPos, currentPos + segment.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
             currentPos += segment.length
@@ -280,14 +335,18 @@ class RecipesActivity : AppCompatActivity() {
         llTotal.visibility = View.VISIBLE
         val contentBuilder = StringBuilder()
         val multiplier = recipe.servings
-        var totalCals = 0.0; var totalCarbs = 0.0; var totalProt = 0.0; var totalPrice = 0.0
+        var totalCals = 0.0; var totalCarbs = 0.0; var totalProt = 0.0; var incrementalPrice = 0.0
+
+        val pool = PriceCalculator.buildAvailablePool(currentPantryItems)
+        val optimization = PriceCalculator.performGreedyOptimization(recipe, allStoreItems, multiplier, userMaxBudget, pool)
+        val selections = optimization.third
 
         recipe.ingredients?.forEach { (fullName, amount) ->
             val cleanName = fullName.split("(")[0].trim()
             val qtyNumeric = PriceCalculator.extractNumericValue(amount.toString())
             val scaledQty = qtyNumeric * multiplier
             val entry = ingredientLibrary.entries.find { it.key.equals(cleanName, true) }?.value
-            val cheapestItem = PriceCalculator.findCheapestMatch(fullName, allStoreItems)
+            val selectedItem = selections[fullName]
 
             if (entry != null) {
                 val factor = if (cleanName.contains("Egg", true)) scaledQty else (scaledQty / 50.0)
@@ -297,35 +356,30 @@ class RecipesActivity : AppCompatActivity() {
                 totalCals += kcal; totalCarbs += carbs; totalProt += prot
                 
                 contentBuilder.append("• $fullName (${PriceCalculator.scaleAmount(amount.toString(), multiplier)})\n")
-                if (cheapestItem != null) {
-                    val orderCount = PriceCalculator.calculateOrderCount(amount.toString(), cheapestItem.size, multiplier)
-                    val cost = cheapestItem.price * orderCount
-                    totalPrice += cost
-                    val sizeText = if (cheapestItem.size.isNotEmpty()) " [${cheapestItem.size}]" else ""
-                    contentBuilder.append("   ₱${String.format("%.2f", cost)} (${cheapestItem.name}$sizeText) | ${kcal.toInt()} kcal | P: ${prot.toInt()}g\n\n")
+                if (selectedItem != null) {
+                    val tag = selectedItem.ingredientTag.lowercase().trim()
+                    val needed = qtyNumeric * multiplier
+                    val avail = pool[tag] ?: 0.0
+                    
+                    if (avail >= needed) {
+                        contentBuilder.append("   FREE (Leftovers) | ${kcal.toInt()} kcal | P: ${prot.toInt()}g\n\n")
+                    } else {
+                        val gap = needed - avail
+                        val unitSize = PriceCalculator.extractNumericValue(selectedItem.size)
+                        val packs = if (unitSize > 0) ceil(gap / unitSize).toInt().coerceAtLeast(1) else 1
+                        val cost = selectedItem.price * packs
+                        incrementalPrice += cost
+                        val sizeText = if (selectedItem.size.isNotEmpty()) " [${selectedItem.size}]" else ""
+                        val gradeText = if (selectedItem.getInferredGrade() != "Standard") " <${selectedItem.getInferredGrade()}>" else ""
+                        contentBuilder.append("   ₱${String.format("%.2f", cost)} (${selectedItem.name}$sizeText)$gradeText | ${kcal.toInt()} kcal | P: ${prot.toInt()}g\n\n")
+                    }
                 } else {
                     contentBuilder.append("   Not Available | ${kcal.toInt()} kcal | P: ${prot.toInt()}g\n\n")
                 }
             }
         }
         tvContent.text = contentBuilder.toString().trim()
-        tvTotal.text = "Total: ${totalCals.toInt()} kcal | ₱${String.format("%.2f", totalPrice)}\nP: ${totalProt.toInt()}g | C: ${totalCarbs.toInt()}g"
-        btnCloseX.setOnClickListener { dialog.dismiss() }
-        dialog.show()
-    }
-
-    private fun showStepsDialog(recipe: Recipe) {
-        val dialogView = layoutInflater.inflate(R.layout.dialog_custom_info, null)
-        val dialog = AlertDialog.Builder(this).setView(dialogView).create()
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        val tvTitle = dialogView.findViewById<TextView>(R.id.dialogTitle)
-        val tvContent = dialogView.findViewById<TextView>(R.id.dialogContent)
-        val llTotal = dialogView.findViewById<LinearLayout>(R.id.llTotalSection)
-        val btnCloseX = dialogView.findViewById<ImageButton>(R.id.btnCloseDialog)
-        tvTitle.text = "${recipe.title} - Steps"
-        llTotal.visibility = View.GONE
-        val steps = recipe.steps?.mapIndexed { i, s -> "${i + 1}. $s" }?.joinToString("\n\n") ?: "No steps available."
-        tvContent.text = steps
+        tvTotal.text = "Nutrition: ${totalCals.toInt()} kcal | Incremental Price: ₱${String.format("%.2f", incrementalPrice)}\nP: ${totalProt.toInt()}g | C: ${totalCarbs.toInt()}g"
         btnCloseX.setOnClickListener { dialog.dismiss() }
         dialog.show()
     }
@@ -340,31 +394,76 @@ class RecipesActivity : AppCompatActivity() {
             Toast.makeText(this, "Check ingredients first", Toast.LENGTH_SHORT).show()
             return
         }
+        
+        val pool = PriceCalculator.buildAvailablePool(currentPantryItems)
+        val optimization = PriceCalculator.performGreedyOptimization(recipe, allStoreItems, multiplier, userMaxBudget, pool)
+        val incrementalCost = optimization.first
+        val fitsBudget = optimization.second
+        val selections = optimization.third
+
+        if (!fitsBudget && userMaxBudget > 0) {
+            AlertDialog.Builder(this)
+                .setTitle("Budget Too Low")
+                .setMessage("Even with budget-friendly alternatives and leftovers (₱${String.format("%.2f", incrementalCost)}), this recipe exceeds your budget of ₱$userMaxBudget.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
 
         val pantryRef = database.child("Users").child(uid).child("Pantry")
+        val updates = mutableMapOf<String, Any?>()
+        
+        val runningPool = pool.toMutableMap()
+
         selected.forEach { ing ->
-            val cheapestItem = PriceCalculator.findCheapestMatch(ing.name, allStoreItems)
+            val selectedItem = selections[ing.name]
+            val amountStr = ing.amount
+            val volumeNeededNow = PriceCalculator.extractNumericValue(amountStr) * multiplier
+            
+            val extraPacksNeeded: Int
+            val costForThisRecipe: Double
+            
+            if (selectedItem != null) {
+                val tag = selectedItem.ingredientTag.lowercase().trim()
+                val unitSize = PriceCalculator.extractNumericValue(selectedItem.size)
+                val availableNow = runningPool[tag] ?: 0.0
+                
+                if (availableNow >= volumeNeededNow) {
+                    extraPacksNeeded = 0
+                    costForThisRecipe = 0.0
+                    runningPool[tag] = availableNow - volumeNeededNow
+                } else {
+                    val gap = volumeNeededNow - availableNow
+                    extraPacksNeeded = if (unitSize > 0) ceil(gap / unitSize).toInt().coerceAtLeast(1) else 1
+                    costForThisRecipe = selectedItem.price * extraPacksNeeded
+                    runningPool[tag] = (availableNow + (extraPacksNeeded * (if (unitSize > 0) unitSize else gap))) - volumeNeededNow
+                }
+            } else {
+                extraPacksNeeded = multiplier
+                costForThisRecipe = 0.0
+            }
+
             val key = pantryRef.push().key ?: return@forEach
-
-            val orderCount = if (cheapestItem != null) PriceCalculator.calculateOrderCount(ing.amount, cheapestItem.size, multiplier) else multiplier
-            val linePrice = if (cheapestItem != null) cheapestItem.price * orderCount else 0.0
-
-            val item = mapOf(
+            val pantryItem = mapOf(
                 "id" to key,
-                "name" to (cheapestItem?.name ?: ing.name),
+                "name" to (selectedItem?.name ?: ing.name),
                 "amount" to PriceCalculator.scaleAmount(ing.amount, multiplier),
                 "recipeTitle" to recipe.title,
                 "isChecked" to true,
-                "count" to orderCount,
-                "price" to linePrice,
-                "imageUrl" to (cheapestItem?.img ?: ""),
-                "ingredientTag" to (cheapestItem?.ingredient ?: ing.name),
-                "size" to (cheapestItem?.size ?: "")
+                "count" to extraPacksNeeded,
+                "price" to costForThisRecipe,
+                "imageUrl" to (selectedItem?.getDisplayImg() ?: ""),
+                "ingredientTag" to (selectedItem?.ingredientTag ?: ing.name),
+                "size" to (selectedItem?.size ?: ""),
+                "itemGrade" to (selectedItem?.getInferredGrade() ?: "Standard")
             )
-            pantryRef.child(key).setValue(item)
+            updates[key] = pantryItem
         }
-        Toast.makeText(this, "Added to Pantry!", Toast.LENGTH_SHORT).show()
-        startActivity(Intent(this, PantryActivity::class.java))
+        
+        pantryRef.updateChildren(updates).addOnSuccessListener {
+            Toast.makeText(this, "Added to Pantry with Unit Awareness!", Toast.LENGTH_SHORT).show()
+            startActivity(Intent(this, PantryActivity::class.java))
+        }
     }
 
     private fun logRecipeToDiary() {

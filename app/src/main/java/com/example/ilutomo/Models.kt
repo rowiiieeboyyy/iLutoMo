@@ -26,6 +26,9 @@ data class Recipe(
 
     @get:Exclude
     var calculatedPrice: Double = 0.0,
+    
+    @get:Exclude
+    var optimizedPrice: Double = 0.0,
 
     @get:Exclude
     var isMissingIngredients: Boolean = false,
@@ -44,7 +47,10 @@ data class Recipe(
     ),
 
     @get:Exclude
-    var matchScore: Double = 0.0
+    var matchScore: Double = 0.0,
+    
+    @get:Exclude
+    var isOutOfBudget: Boolean = false
 ) : Serializable
 
 /**
@@ -77,7 +83,7 @@ data class InventoryItem(
     var id: String = "",
     var ingredient: String = "",
     var ingredientTag: String = "",
-    var itemGrade: String = "Budget",
+    var itemGrade: String = "", // Budget, Standard, Premium
     var name: String = "",
     var itemName: String = "",
     var stock: Int = 0,
@@ -95,6 +101,17 @@ data class InventoryItem(
     @Exclude
     fun getDisplayImg(): String {
         return img.ifEmpty { imageUrl }
+    }
+    
+    @Exclude
+    fun getInferredGrade(): String {
+        val n = getDisplayName().lowercase()
+        val g = itemGrade.lowercase()
+        return when {
+            g == "budget" || n.contains("budget") -> "Budget"
+            g == "premium" || n.contains("premium") -> "Premium"
+            else -> "Standard"
+        }
     }
 }
 
@@ -114,7 +131,7 @@ data class PantryIngredient(
     var businessName: String = "",
     var imageUrl: String = "",
     var count: Int = 1,
-    var itemGrade: String = "Budget",
+    var itemGrade: String = "Standard",
     var ingredientTag: String = ""
 ) : Serializable
 
@@ -160,7 +177,8 @@ data class DisplayIngredient(
 )
 
 object PriceCalculator {
-    fun extractNumericValue(input: String): Double {
+    fun extractNumericValue(input: String?): Double {
+        if (input == null) return 0.0
         val numberRegex = "([0-9]*\\.?[0-9]+)".toRegex()
         return numberRegex.find(input)?.value?.toDoubleOrNull() ?: 0.0
     }
@@ -173,7 +191,15 @@ object PriceCalculator {
         return ceil(totalNeeded / sizeValue).toInt().coerceAtLeast(1)
     }
 
+    fun findStandardMatch(ingredientName: String, inventory: List<InventoryItem>): InventoryItem? {
+        return findMatchByGrade(ingredientName, inventory, listOf("Standard", "Budget", "Premium"))
+    }
+    
     fun findCheapestMatch(ingredientName: String, inventory: List<InventoryItem>): InventoryItem? {
+        return findMatchByGrade(ingredientName, inventory, listOf("Budget", "Standard", "Premium"))
+    }
+
+    private fun findMatchByGrade(ingredientName: String, inventory: List<InventoryItem>, preferredGrades: List<String>): InventoryItem? {
         val queryClean = ingredientName.lowercase().trim().replace(Regex("[^a-z0-9 ]"), " ")
         val queryWords = queryClean.split(" ").map { it.removeSuffix("s") }.filter { it.isNotBlank() }
 
@@ -205,19 +231,110 @@ object PriceCalculator {
         val maxScore = scoredItems.maxOf { it.second }
         val bestMatches = scoredItems.filter { it.second == maxScore }.map { it.first }
 
+        for (grade in preferredGrades) {
+            val gradeMatch = bestMatches.filter { it.getInferredGrade().equals(grade, true) }.minByOrNull { it.price }
+            if (gradeMatch != null) return gradeMatch
+        }
+
         return bestMatches.minByOrNull { it.price }
     }
 
-    fun calculateRecipePrice(recipe: Recipe, inventory: List<InventoryItem>, multiplier: Int): Double {
-        var totalPrice = 0.0
-        recipe.ingredients?.forEach { (name, amount) ->
-            val cheapestItem = findCheapestMatch(name, inventory)
-            if (cheapestItem != null) {
-                val orderCount = calculateOrderCount(amount.toString(), cheapestItem.size, multiplier)
-                totalPrice += cheapestItem.price * orderCount
+    /**
+     * Builds a map of available volume (leftovers) from current pantry items.
+     */
+    fun buildAvailablePool(pantryItems: List<PantryIngredient>): Map<String, Double> {
+        val totalVolumeBought = mutableMapOf<String, Double>()
+        val totalVolumeUsed = mutableMapOf<String, Double>()
+        
+        pantryItems.forEach { item ->
+            val tag = item.ingredientTag.lowercase().trim()
+            val unitSize = extractNumericValue(item.size)
+            totalVolumeBought[tag] = (totalVolumeBought[tag] ?: 0.0) + (unitSize * item.count)
+            totalVolumeUsed[tag] = (totalVolumeUsed[tag] ?: 0.0) + extractNumericValue(item.amount)
+        }
+        
+        return totalVolumeBought.mapValues { (tag, total) ->
+            (total - (totalVolumeUsed[tag] ?: 0.0)).coerceAtLeast(0.0)
+        }
+    }
+    
+    /**
+     * Unit-Aware Greedy Algorithm: Tries to fit the recipe into the budget by swapping items to cheaper grades.
+     * Accounts for existing leftovers in the pantry pool.
+     */
+    fun performGreedyOptimization(
+        recipe: Recipe, 
+        inventory: List<InventoryItem>, 
+        multiplier: Int, 
+        maxBudget: Double,
+        pantryAvailablePool: Map<String, Double> = emptyMap()
+    ): Triple<Double, Boolean, Map<String, InventoryItem>> {
+        val selections = mutableMapOf<String, InventoryItem>()
+        
+        // Start with Standard grade for all ingredients
+        recipe.ingredients?.forEach { (name, _) ->
+            findStandardMatch(name, inventory)?.let { selections[name] = it }
+        }
+        
+        fun calculateIncrementalCost(currentSelections: Map<String, InventoryItem>): Double {
+            var incrementalTotal = 0.0
+            val runningPool = pantryAvailablePool.toMutableMap()
+            
+            recipe.ingredients?.forEach { (name, amount) ->
+                currentSelections[name]?.let { item ->
+                    val tag = item.ingredientTag.lowercase().trim()
+                    val needed = extractNumericValue(amount.toString()) * multiplier
+                    val available = runningPool[tag] ?: 0.0
+                    
+                    if (available < needed) {
+                        val gap = needed - available
+                        val unitSize = extractNumericValue(item.size)
+                        if (unitSize > 0) {
+                            val extraPacks = ceil(gap / unitSize).toInt().coerceAtLeast(1)
+                            incrementalTotal += item.price * extraPacks
+                            runningPool[tag] = available + (extraPacks * unitSize)
+                        } else {
+                            incrementalTotal += item.price
+                            runningPool[tag] = available + needed // Assume covered
+                        }
+                    }
+                    runningPool[tag] = (runningPool[tag] ?: 0.0) - needed
+                }
+            }
+            return incrementalTotal
+        }
+        
+        var currentIncrementalTotal = calculateIncrementalCost(selections)
+        
+        // If the incremental cost exceeds the per-recipe budget, optimize to cheaper alternatives
+        if (currentIncrementalTotal > maxBudget && maxBudget > 0) {
+            val swapCandidates = recipe.ingredients?.keys?.mapNotNull { name ->
+                val current = selections[name] ?: return@mapNotNull null
+                if (current.getInferredGrade() == "Budget") return@mapNotNull null
+                
+                val budgetAlt = findMatchByGrade(name, inventory, listOf("Budget"))
+                if (budgetAlt != null && budgetAlt.price < current.price) {
+                    val savingsPerPack = current.price - budgetAlt.price
+                    Triple(name, budgetAlt, savingsPerPack)
+                } else null
+            }?.sortedByDescending { it.third } // Greedy: Start with biggest potential savings
+            
+            swapCandidates?.forEach { (name, alt, _) ->
+                if (currentIncrementalTotal <= maxBudget) return@forEach
+                
+                val original = selections[name]!!
+                selections[name] = alt
+                val newTotal = calculateIncrementalCost(selections)
+                
+                if (newTotal < currentIncrementalTotal) {
+                    currentIncrementalTotal = newTotal
+                } else {
+                    selections[name] = original // Revert if swapping didn't improve total incremental cost
+                }
             }
         }
-        return totalPrice
+        
+        return Triple(currentIncrementalTotal, currentIncrementalTotal <= maxBudget || maxBudget <= 0, selections)
     }
 
     fun scaleAmount(amount: String, multiplier: Int): String {
@@ -228,5 +345,42 @@ object PriceCalculator {
             val formattedValue = if (scaledValue % 1 == 0.0) scaledValue.toInt().toString() else "%.1f".format(scaledValue)
             amount.replaceFirst(match.value, formattedValue)
         } else amount
+    }
+
+    /**
+     * Calculates the total price for a recipe based on available inventory items.
+     * This follows a simplified unit-aware calculation without considering pantry leftovers.
+     */
+    fun calculateRecipePrice(recipe: Recipe, inventory: List<InventoryItem>, multiplier: Int): Double {
+        val selections = mutableMapOf<String, InventoryItem>()
+        recipe.ingredients?.forEach { (name, _) ->
+            findStandardMatch(name, inventory)?.let { selections[name] = it }
+        }
+        
+        var total = 0.0
+        val runningPool = mutableMapOf<String, Double>()
+        
+        recipe.ingredients?.forEach { (name, amount) ->
+            selections[name]?.let { item ->
+                val tag = item.ingredientTag.lowercase().trim()
+                val needed = extractNumericValue(amount.toString()) * multiplier
+                val available = runningPool[tag] ?: 0.0
+                
+                if (available < needed) {
+                    val gap = needed - available
+                    val unitSize = extractNumericValue(item.size)
+                    if (unitSize > 0) {
+                        val extraPacks = ceil(gap / unitSize).toInt().coerceAtLeast(1)
+                        total += item.price * extraPacks
+                        runningPool[tag] = available + (extraPacks * unitSize)
+                    } else {
+                        total += item.price
+                        runningPool[tag] = available + needed
+                    }
+                }
+                runningPool[tag] = (runningPool[tag] ?: 0.0) - needed
+            }
+        }
+        return total
     }
 }
