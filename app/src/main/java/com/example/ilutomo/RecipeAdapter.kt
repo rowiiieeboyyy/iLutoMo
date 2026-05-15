@@ -22,23 +22,23 @@ class RecipeAdapter(
     private val auth = FirebaseAuth.getInstance()
     private val database = FirebaseDatabase.getInstance().reference
     private val savedRecipeIds = mutableSetOf<String>()
-    private var inventoryItems = listOf<InventoryItem>()
     
-    private var userMaxBudget = 1000.0
     private var isBudgetEnabled = false
+    private var userMaxBudget = 1000.0
 
     init {
         fetchSavedRecipes()
     }
 
-    fun updateInventory(newInventory: List<InventoryItem>) {
-        this.inventoryItems = newInventory
-        notifyDataSetChanged()
-    }
-    
     fun updateBudgetSettings(enabled: Boolean, max: Double) {
         this.isBudgetEnabled = enabled
         this.userMaxBudget = max
+        notifyDataSetChanged()
+    }
+
+    // Note: We no longer need to pass inventory to adapter for price calculation
+    // because prices are pre-calculated in background thread in HomeActivity.
+    fun updateInventory(newInventory: List<InventoryItem>) {
         notifyDataSetChanged()
     }
 
@@ -101,19 +101,13 @@ class RecipeAdapter(
             }
         }
 
-        // DISPLAY TOTAL ESTIMATED PRICE - Always Standard as requested
+        // DISPLAY TOTAL ESTIMATED PRICE - Fast display using pre-calculated value
         holder.tvPrice?.let {
             it.visibility = View.VISIBLE
-            val total = if (inventoryItems.isNotEmpty()) {
-                // Greedy is only for null error/pantry. Dashboard display stays Standard.
-                PriceCalculator.calculateRecipePrice(recipe, inventoryItems, multiplier)
-            } else {
-                recipe.calculatedPrice * multiplier
-            }
+            val total = recipe.calculatedPrice * multiplier
             it.text = "₱${String.format(Locale.getDefault(), "%.2f", total)}"
         }
 
-        // --- INCOMPLETE WARNING ---
         holder.tvIncomplete?.let {
             it.visibility = if (recipe.isMissingIngredients) View.VISIBLE else View.GONE
         }

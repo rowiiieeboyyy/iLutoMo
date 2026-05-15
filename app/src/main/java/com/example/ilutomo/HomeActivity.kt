@@ -89,59 +89,70 @@ class HomeActivity : AppCompatActivity() {
     private fun loadRecipes() {
         database.addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(s: DataSnapshot) {
-                allRecipes.clear()
-                for (child in s.children) {
-                    if (child.key?.startsWith("recipe_") == true) {
-                        try {
-                            val r = child.getValue(Recipe::class.java) ?: continue
-                            r.id = child.key!!
-                            r.totalTime = child.child("totalTime").value?.toString()?.toIntOrNull() ?: 0
+                // RUN HEAVY CALCULATIONS ON BACKGROUND THREAD TO PREVENT ANR
+                Thread {
+                    val tempRecipes = mutableListOf<Recipe>()
+                    val currentInventory = synchronized(businessInventory) { businessInventory.toList() }
+                    
+                    for (child in s.children) {
+                        if (child.key?.startsWith("recipe_") == true) {
+                            try {
+                                val r = child.getValue(Recipe::class.java) ?: continue
+                                r.id = child.key!!
+                                r.totalTime = child.child("totalTime").value?.toString()?.toIntOrNull() ?: 0
 
-                            val tasteMap = mutableMapOf<String, Boolean>()
-                            child.child("tasteProfile").children.forEach { t ->
-                                tasteMap[t.key?.lowercase() ?: ""] = t.value == true
-                            }
-                            r.tasteProfile = tasteMap
+                                val tasteMap = mutableMapOf<String, Boolean>()
+                                child.child("tasteProfile").children.forEach { t ->
+                                    tasteMap[t.key?.lowercase() ?: ""] = t.value == true
+                                }
+                                r.tasteProfile = tasteMap
 
-                            // --- PRICING & MACRO CALCULATION LOGIC ---
-                            var pro = 0.0; var carb = 0.0; var sug = 0.0; var cal = 0.0
-                            
-                            // Dashboard price display stays Standard regardless of budget setting.
-                            val totalPrice = PriceCalculator.calculateRecipePrice(r, businessInventory, 1)
-                            
-                            var isMissing = false
-                            r.ingredients?.forEach { (name, amt) ->
-                                val lib = ingredientLibrary[name]
-                                if (lib != null) {
-                                    val amountStr = amt.toString()
-                                    val qty = PriceCalculator.extractNumericValue(amountStr)
-                                    val factor = if (name.contains("Egg", true)) qty else (qty / 50.0)
+                                // --- PRICING & MACRO CALCULATION LOGIC ---
+                                var pro = 0.0; var carb = 0.0; var sug = 0.0; var cal = 0.0
+                                
+                                // Calculate price once and store it in r.calculatedPrice
+                                val totalPrice = PriceCalculator.calculateRecipePrice(r, currentInventory, 1)
+                                
+                                var isMissing = false
+                                r.ingredients?.forEach { (name, amt) ->
+                                    val lib = ingredientLibrary[name]
+                                    if (lib != null) {
+                                        val amountStr = amt.toString()
+                                        val qty = PriceCalculator.extractNumericValue(amountStr)
+                                        val factor = if (name.contains("Egg", true)) qty else (qty / 50.0)
 
-                                    pro += factor * toFilterDouble(lib.child("pro").value, 0.0)
-                                    carb += factor * toFilterDouble(lib.child("carb").value, 0.0)
-                                    sug += factor * toFilterDouble(lib.child("sugar").value, 0.0)
-                                    cal += factor * toFilterDouble(lib.child("cal").value, 0.0)
-                                    
-                                    if (PriceCalculator.findStandardMatch(name, businessInventory) == null) {
-                                        isMissing = true
+                                        pro += factor * toFilterDouble(lib.child("pro").value, 0.0)
+                                        carb += factor * toFilterDouble(lib.child("carb").value, 0.0)
+                                        sug += factor * toFilterDouble(lib.child("sugar").value, 0.0)
+                                        cal += factor * toFilterDouble(lib.child("cal").value, 0.0)
+                                        
+                                        if (PriceCalculator.findStandardMatch(name, currentInventory) == null) {
+                                            isMissing = true
+                                        }
                                     }
                                 }
+
+                                r.calculatedPrice = totalPrice
+                                r.isMissingIngredients = isMissing
+                                r.calculatedMacros["Protein"] = pro.toInt()
+                                r.calculatedMacros["Carbs"] = carb.toInt()
+                                r.calculatedMacros["Sugar"] = sug.toInt()
+                                r.calculatedMacros["Calories"] = cal.toInt()
+
+                                tempRecipes.add(r)
+                            } catch (e: Exception) {
+                                Log.e("RECIPE_LOAD", "Error parsing ${child.key}: ${e.message}")
                             }
-
-                            r.calculatedPrice = totalPrice
-                            r.isMissingIngredients = isMissing
-                            r.calculatedMacros["Protein"] = pro.toInt()
-                            r.calculatedMacros["Carbs"] = carb.toInt()
-                            r.calculatedMacros["Sugar"] = sug.toInt()
-                            r.calculatedMacros["Calories"] = cal.toInt()
-
-                            allRecipes.add(r)
-                        } catch (e: Exception) {
-                            Log.e("RECIPE_LOAD", "Error parsing ${child.key}: ${e.message}")
                         }
                     }
-                }
-                applyFilters()
+                    
+                    runOnUiThread {
+                        allRecipes.clear()
+                        allRecipes.addAll(tempRecipes)
+                        applyFilters()
+                        binding.pbHomeLoading?.visibility = View.GONE
+                    }
+                }.start()
             }
             override fun onCancelled(e: DatabaseError) {}
         })
@@ -195,7 +206,6 @@ class HomeActivity : AppCompatActivity() {
                         if (algNode.child("Dairy").value == true) activeAllergens.add("Dairy")
                         customAllergen = algNode.child("Others_Value").value?.toString()?.lowercase() ?: ""
                         
-                        // Pass budget settings to adapter for use in details but not for card price
                         recipeAdapter.updateBudgetSettings(isBudgetEnabled, budgetMax)
                     }
                     loadRecipes()
@@ -218,9 +228,10 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun loadData() {
+        binding.pbHomeLoading?.visibility = View.VISIBLE
         database.child("Businesses").addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(bizSnap: DataSnapshot) {
-                businessInventory.clear()
+                val tempInventory = mutableListOf<InventoryItem>()
                 for (biz in bizSnap.children) {
                     for (inv in biz.child("inventory").children) {
                         try {
@@ -234,11 +245,15 @@ class HomeActivity : AppCompatActivity() {
                                 size = inv.child("size").value?.toString() ?: ""
                                 itemGrade = inv.child("itemGrade").value?.toString() ?: "Standard"
                             }
-                            businessInventory.add(itm)
+                            tempInventory.add(itm)
                         } catch (e: Exception) {}
                     }
                 }
-                recipeAdapter.updateInventory(businessInventory)
+                synchronized(businessInventory) {
+                    businessInventory.clear()
+                    businessInventory.addAll(tempInventory)
+                }
+                recipeAdapter.updateInventory(tempInventory)
                 loadIngredientLibrary()
             }
             override fun onCancelled(e: DatabaseError) {}

@@ -177,9 +177,11 @@ data class DisplayIngredient(
 )
 
 object PriceCalculator {
+    private val numberRegex = "([0-9]*\\.?[0-9]+)".toRegex()
+    private val cleanRegex = Regex("[^a-z0-9 ]")
+
     fun extractNumericValue(input: String?): Double {
         if (input == null) return 0.0
-        val numberRegex = "([0-9]*\\.?[0-9]+)".toRegex()
         return numberRegex.find(input)?.value?.toDoubleOrNull() ?: 0.0
     }
 
@@ -200,17 +202,18 @@ object PriceCalculator {
     }
 
     private fun findMatchByGrade(ingredientName: String, inventory: List<InventoryItem>, preferredGrades: List<String>): InventoryItem? {
-        val queryClean = ingredientName.lowercase().trim().replace(Regex("[^a-z0-9 ]"), " ")
+        val queryClean = ingredientName.lowercase().trim().replace(cleanRegex, " ")
         val queryWords = queryClean.split(" ").map { it.removeSuffix("s") }.filter { it.isNotBlank() }
 
         if (queryWords.isEmpty()) return null
 
+        // Cache pre-cleaned item strings would be better, but optimizing comparison for now
         val scoredItems = inventory.mapNotNull { item ->
             if (item.stock <= 0 || item.price <= 0) return@mapNotNull null
 
-            val itemName = item.name.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
-            val itemIng = item.ingredient.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
-            val itemTag = item.ingredientTag.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
+            val itemName = item.name.lowercase().replace(cleanRegex, " ")
+            val itemIng = item.ingredient.lowercase().replace(cleanRegex, " ")
+            val itemTag = item.ingredientTag.lowercase().replace(cleanRegex, " ")
 
             val combined = "$itemName $itemIng $itemTag"
 
@@ -338,7 +341,6 @@ object PriceCalculator {
     }
 
     fun scaleAmount(amount: String, multiplier: Int): String {
-        val numberRegex = "([0-9]*\\.?[0-9]+)".toRegex()
         val match = numberRegex.find(amount)
         return if (match != null) {
             val scaledValue = match.value.toDouble() * multiplier
