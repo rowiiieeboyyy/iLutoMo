@@ -61,6 +61,8 @@ class RecipeDetailsActivity : AppCompatActivity() {
         binding.fabAddToPantry.setOnClickListener { addToPantry(recipe) }
         binding.btnSaveRecipe.setOnClickListener { saveRecipeToMyList(recipe) }
         binding.btnLogToDiary.setOnClickListener { logRecipeToDiary(recipe) }
+        
+        binding.btnErrorBack.setOnClickListener { finish() }
 
         fetchUserPreferences(recipe)
     }
@@ -161,6 +163,20 @@ class RecipeDetailsActivity : AppCompatActivity() {
         val pool = PriceCalculator.buildAvailablePool(currentPantryItems)
         val (incrementalCost, fitsBudget, selections) = PriceCalculator.performGreedyOptimization(recipe, allStoreItems, multiplier, userMaxBudget, pool)
 
+        // Show Full Page Error if budget is too low
+        if (!fitsBudget && userMaxBudget > 0) {
+            binding.layoutBudgetError.visibility = View.VISIBLE
+            binding.tvBudgetMessage.text = "Your budget of ₱${String.format("%.2f", userMaxBudget)} is too low. Estimated incremental cost is ₱${String.format("%.2f", incrementalCost)} even with optimized alternatives."
+            binding.recipeContentScroll.visibility = View.GONE
+            binding.detailActionButtons.visibility = View.GONE
+            binding.appBar.setExpanded(false, false)
+            return
+        } else {
+            binding.layoutBudgetError.visibility = View.GONE
+            binding.recipeContentScroll.visibility = View.VISIBLE
+            binding.detailActionButtons.visibility = View.VISIBLE
+        }
+
         recipe.ingredients?.forEach { (name, rawAmount) ->
             val amountStr = rawAmount.toString()
             val scaledAmount = scaleAmount(amountStr, multiplier)
@@ -197,13 +213,6 @@ class RecipeDetailsActivity : AppCompatActivity() {
         }
 
         binding.tvDetailPrice.text = "₱${String.format("%.2f", incrementalCost)}"
-        
-        if (!fitsBudget && userMaxBudget > 0) {
-            binding.tvBudgetWarning.visibility = View.VISIBLE
-            binding.tvBudgetWarning.text = "Budget Too Low: Incremental cost (₱${String.format("%.2f", incrementalCost)}) exceeds your ₱$userMaxBudget budget."
-        } else {
-            binding.tvBudgetWarning.visibility = View.GONE
-        }
         
         binding.tvStepsList.text = recipe.steps?.mapIndexed { i, s -> "${i + 1}. $s" }?.joinToString("\n\n") ?: "No cooking steps provided."
     }
@@ -285,28 +294,33 @@ class RecipeDetailsActivity : AppCompatActivity() {
                 runningPool[standardTag] = (availableNow + (extraPacksNeeded * unitSize)) - volumeNeededNow
             }
 
-            val key = pantryRef.push().key ?: return@forEach
-            val pantryItem = mapOf(
-                "id" to key,
-                "name" to selectedItem.name,
-                "amount" to scaleAmount(amountStr, multiplier),
-                "recipeTitle" to recipe.title,
-                "isChecked" to true,
-                "count" to extraPacksNeeded,
-                "price" to costForThisRecipe,
-                "size" to selectedItem.size,
-                "imageUrl" to selectedItem.getDisplayImg(),
-                "ingredientTag" to selectedItem.ingredientTag,
-                "itemGrade" to selectedItem.getInferredGrade()
-            )
-            updates[key] = pantryItem
+            // ONLY ADD TO PANTRY IF WE ACTUALLY NEED TO BUY IT (extraPacksNeeded > 0)
+            if (extraPacksNeeded > 0) {
+                val key = pantryRef.push().key ?: return@forEach
+                val pantryItem = mapOf(
+                    "id" to key,
+                    "name" to selectedItem.name,
+                    "amount" to scaleAmount(amountStr, multiplier),
+                    "recipeTitle" to recipe.title,
+                    "isChecked" to true,
+                    "count" to extraPacksNeeded,
+                    "price" to costForThisRecipe,
+                    "size" to selectedItem.size,
+                    "imageUrl" to selectedItem.getDisplayImg(),
+                    "ingredientTag" to selectedItem.ingredientTag,
+                    "itemGrade" to selectedItem.getInferredGrade()
+                )
+                updates[key] = pantryItem
+            }
         }
 
         if (updates.isNotEmpty()) {
             pantryRef.updateChildren(updates).addOnSuccessListener {
-                Toast.makeText(this, "Recipe added to Pantry with Unit Awareness!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Recipe added to Pantry!", Toast.LENGTH_SHORT).show()
                 startActivity(Intent(this, PantryActivity::class.java))
             }
+        } else {
+            Toast.makeText(this, "All ingredients are already in your pantry!", Toast.LENGTH_SHORT).show()
         }
     }
     

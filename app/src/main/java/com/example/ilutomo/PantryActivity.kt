@@ -99,8 +99,12 @@ class PantryActivity : AppCompatActivity() {
                 
                 val listItems = mutableListOf<PantryListItem>()
                 for ((title, items) in groupedMap) {
-                    listItems.add(PantryListItem.Header(title, outOfBudgetRecipes.contains(title)))
-                    items.forEach { listItems.add(PantryListItem.Ingredient(it)) }
+                    // Filter out "borrowed" or already fulfilled ingredients (count <= 0)
+                    val displayItems = items.filter { it.count > 0 }
+                    if (displayItems.isNotEmpty()) {
+                        listItems.add(PantryListItem.Header(title, outOfBudgetRecipes.contains(title)))
+                        displayItems.forEach { listItems.add(PantryListItem.Ingredient(it)) }
+                    }
                 }
                 
                 pantryAdapter.updateData(listItems)
@@ -113,13 +117,9 @@ class PantryActivity : AppCompatActivity() {
     private fun calculateOutOfBudgetRecipes(groupedMap: Map<String, List<PantryIngredient>>) {
         outOfBudgetRecipes.clear()
         
-        // DISTRIBUTED COST LOGIC for per-recipe budget awareness (Unit Awareness)
-        // This distributes the cost of shared units across recipes that use them.
-        
         val tagToTotalVolumeNeeded = mutableMapOf<String, Double>()
         val tagToTotalCostPaid = mutableMapOf<String, Double>()
         
-        // 1. Sum up total volume needed and total cost paid per ingredient tag across the entire pantry
         pantryIngredients.forEach { ing ->
             val tag = ing.ingredientTag.lowercase().trim()
             val volume = PriceCalculator.extractNumericValue(ing.amount)
@@ -127,10 +127,8 @@ class PantryActivity : AppCompatActivity() {
             tagToTotalCostPaid[tag] = (tagToTotalCostPaid[tag] ?: 0.0) + ing.price
         }
 
-        // 2. Determine "Fair Share" cost for each recipe by weighting cost by volume used
         for ((title, ingredients) in groupedMap) {
             var recipeDistributedCost = 0.0
-            
             for (ing in ingredients) {
                 val tag = ing.ingredientTag.lowercase().trim()
                 val totalVolumeNeededForTag = tagToTotalVolumeNeeded[tag] ?: 0.0
@@ -138,15 +136,12 @@ class PantryActivity : AppCompatActivity() {
                 
                 if (totalVolumeNeededForTag > 0) {
                     val myVolume = PriceCalculator.extractNumericValue(ing.amount)
-                    // My share is proportional to my usage of the total pool
                     val myShare = (myVolume / totalVolumeNeededForTag) * totalCostPaidForTag
                     recipeDistributedCost += myShare
                 }
             }
-            
-            // Check if THIS recipe's fair share exceeds the budget. 
-            // If it shares enough such that its distributed cost is low, it won't be red.
-            if (recipeDistributedCost > userMaxBudget && userMaxBudget > 0) {
+            // Recipe is out of budget if its distributed cost exceeds the user's maximum budget
+            if (recipeDistributedCost > userMaxBudget) {
                 outOfBudgetRecipes.add(title)
             }
         }
@@ -218,7 +213,11 @@ class PantryActivity : AppCompatActivity() {
         val uid = auth.currentUser?.uid ?: return
         val currentC = if (ing.count <= 0) 1 else ing.count
         val newC = currentC + change
-        if (newC <= 0) return
+        if (newC <= 0) {
+            // If count becomes 0, we can remove it as it's now "borrowed" or satisfied
+            database.child("Users").child(uid).child("Pantry").child(ing.id).removeValue()
+            return
+        }
 
         val singleItemPrice = if (currentC > 0) ing.price / currentC else 0.0
         val totalNewPrice = newC * singleItemPrice
@@ -233,7 +232,7 @@ class PantryActivity : AppCompatActivity() {
     private fun updateOrderSummary() {
         llOrderSummaryItems.removeAllViews()
         var total = 0.0
-        pantryIngredients.filter { it.isChecked }.forEach {
+        pantryIngredients.filter { it.isChecked && it.count > 0 }.forEach {
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 5, 0, 5) }
             row.addView(TextView(this).apply {
                 text = "• ${it.name} x${it.count}"
@@ -262,7 +261,7 @@ class PantryActivity : AppCompatActivity() {
     }
 
     private fun fetchStoresAndShowDialog() {
-        val selectedItems = pantryIngredients.filter { it.isChecked }
+        val selectedItems = pantryIngredients.filter { it.isChecked && it.count > 0 }
         if (selectedItems.isEmpty()) {
             Toast.makeText(this, "Select items first!", Toast.LENGTH_SHORT).show()
             return

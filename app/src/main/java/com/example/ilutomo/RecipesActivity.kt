@@ -28,6 +28,13 @@ class RecipesActivity : AppCompatActivity() {
     private lateinit var rvAvailable: RecyclerView
     private lateinit var tvServings: TextView
     private lateinit var tvDetailPrice: TextView
+    
+    // UI for Full Page Error
+    private lateinit var layoutBudgetError: View
+    private lateinit var tvBudgetMessage: TextView
+    private lateinit var btnErrorClose: Button
+    private lateinit var contentLayout: View
+    private lateinit var actionButtonsLayout: View
 
     private var currentIngredients = mutableListOf<DisplayIngredient>()
     private var currentRecipe: Recipe? = null
@@ -48,6 +55,12 @@ class RecipesActivity : AppCompatActivity() {
         rvAvailable = findViewById(R.id.rvAvailableIngredients)
         tvServings = findViewById(R.id.tvRecipeServings)
         tvDetailPrice = findViewById(R.id.tvRecipeDetailPrice)
+        
+        layoutBudgetError = findViewById(R.id.layoutRecipesBudgetError)
+        tvBudgetMessage = findViewById(R.id.tvRecipesBudgetMessage)
+        btnErrorClose = findViewById(R.id.btnRecipesErrorClose)
+        contentLayout = findViewById(R.id.llLists)
+        actionButtonsLayout = findViewById(R.id.llActionButtons)
 
         val btnChoose = findViewById<Button>(R.id.btnChooseRecipe)
         val btnMacros = findViewById<Button>(R.id.btnViewMacros)
@@ -79,6 +92,12 @@ class RecipesActivity : AppCompatActivity() {
                     updateUI()
                 }
             }
+        }
+        
+        btnErrorClose.setOnClickListener {
+            layoutBudgetError.visibility = View.GONE
+            contentLayout.visibility = View.VISIBLE
+            actionButtonsLayout.visibility = View.VISIBLE
         }
 
         bottomNav.selectedItemId = R.id.nav_recipes
@@ -250,6 +269,19 @@ class RecipesActivity : AppCompatActivity() {
         val pool = PriceCalculator.buildAvailablePool(currentPantryItems)
         val (incrementalCost, fitsBudget, selections) = PriceCalculator.performGreedyOptimization(recipe, allStoreItems, multiplier, userMaxBudget, pool)
 
+        // Show Full Page Error if budget is too low
+        if (!fitsBudget && userMaxBudget > 0) {
+            layoutBudgetError.visibility = View.VISIBLE
+            tvBudgetMessage.text = "Your budget of ₱${String.format("%.2f", userMaxBudget)} is too low. Estimated incremental cost is ₱${String.format("%.2f", incrementalCost)} even with optimized alternatives."
+            contentLayout.visibility = View.GONE
+            actionButtonsLayout.visibility = View.GONE
+            return
+        } else {
+            layoutBudgetError.visibility = View.GONE
+            contentLayout.visibility = View.VISIBLE
+            actionButtonsLayout.visibility = View.VISIBLE
+        }
+
         currentIngredients.forEach { ing ->
             val scaledAmount = PriceCalculator.scaleAmount(ing.amount, multiplier)
             val selectedItem = selections[ing.name]
@@ -371,7 +403,7 @@ class RecipesActivity : AppCompatActivity() {
                         incrementalPrice += cost
                         val sizeText = if (selectedItem.size.isNotEmpty()) " [${selectedItem.size}]" else ""
                         val gradeText = if (selectedItem.getInferredGrade() != "Standard") " <${selectedItem.getInferredGrade()}>" else ""
-                        contentBuilder.append("   ₱${String.format("%.2f", cost)} (${selectedItem.name}$sizeText)$gradeText | ${kcal.toInt()} kcal | P: ${prot.toInt()}g\n\n")
+                        contentBuilder.append("   ₱${String.format("%.2f", cost)} (${selectedItem.name}$sizeText)$gradeText" + " | ${kcal.toInt()} kcal | P: ${prot.toInt()}g\n\n")
                     }
                 } else {
                     contentBuilder.append("   Not Available | ${kcal.toInt()} kcal | P: ${prot.toInt()}g\n\n")
@@ -420,8 +452,8 @@ class RecipesActivity : AppCompatActivity() {
             val amountStr = ing.amount
             val volumeNeededNow = PriceCalculator.extractNumericValue(amountStr) * multiplier
             
-            val extraPacksNeeded: Int
-            val costForThisRecipe: Double
+            var extraPacksNeeded = 0
+            var costForThisRecipe = 0.0
             
             if (selectedItem != null) {
                 val tag = selectedItem.ingredientTag.lowercase().trim()
@@ -439,30 +471,39 @@ class RecipesActivity : AppCompatActivity() {
                     runningPool[tag] = (availableNow + (extraPacksNeeded * (if (unitSize > 0) unitSize else gap))) - volumeNeededNow
                 }
             } else {
-                extraPacksNeeded = multiplier
-                costForThisRecipe = 0.0
+                // If no item selected, we still consider it missing/to be added if not explicitly handled
+                // But for pantry, we usually only add selected inventory items.
+                // However, based on user request: "remove the ingredients that are borrowed... just not add it"
+                extraPacksNeeded = 0 
             }
 
-            val key = pantryRef.push().key ?: return@forEach
-            val pantryItem = mapOf(
-                "id" to key,
-                "name" to (selectedItem?.name ?: ing.name),
-                "amount" to PriceCalculator.scaleAmount(ing.amount, multiplier),
-                "recipeTitle" to recipe.title,
-                "isChecked" to true,
-                "count" to extraPacksNeeded,
-                "price" to costForThisRecipe,
-                "imageUrl" to (selectedItem?.getDisplayImg() ?: ""),
-                "ingredientTag" to (selectedItem?.ingredientTag ?: ing.name),
-                "size" to (selectedItem?.size ?: ""),
-                "itemGrade" to (selectedItem?.getInferredGrade() ?: "Standard")
-            )
-            updates[key] = pantryItem
+            // ONLY ADD TO PANTRY IF WE ACTUALLY NEED TO BUY IT
+            if (extraPacksNeeded > 0) {
+                val key = pantryRef.push().key ?: return@forEach
+                val pantryItem = mapOf(
+                    "id" to key,
+                    "name" to (selectedItem?.name ?: ing.name),
+                    "amount" to PriceCalculator.scaleAmount(ing.amount, multiplier),
+                    "recipeTitle" to recipe.title,
+                    "isChecked" to true,
+                    "count" to extraPacksNeeded,
+                    "price" to costForThisRecipe,
+                    "imageUrl" to (selectedItem?.getDisplayImg() ?: ""),
+                    "ingredientTag" to (selectedItem?.ingredientTag ?: ing.name),
+                    "size" to (selectedItem?.size ?: ""),
+                    "itemGrade" to (selectedItem?.getInferredGrade() ?: "Standard")
+                )
+                updates[key] = pantryItem
+            }
         }
         
-        pantryRef.updateChildren(updates).addOnSuccessListener {
-            Toast.makeText(this, "Added to Pantry with Unit Awareness!", Toast.LENGTH_SHORT).show()
-            startActivity(Intent(this, PantryActivity::class.java))
+        if (updates.isNotEmpty()) {
+            pantryRef.updateChildren(updates).addOnSuccessListener {
+                Toast.makeText(this, "Added to Pantry!", Toast.LENGTH_SHORT).show()
+                startActivity(Intent(this, PantryActivity::class.java))
+            }
+        } else {
+            Toast.makeText(this, "All selected ingredients are already in your pantry!", Toast.LENGTH_SHORT).show()
         }
     }
 
