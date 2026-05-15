@@ -46,6 +46,7 @@ class HomeActivity : AppCompatActivity() {
     private var forceShortPrepUI = false
 
     private var budgetMin = 0.0; var budgetMax = 1000.0
+    private var isBudgetEnabled = false
     private var proteinMin = 0.0; var proteinMax = 1000.0
     private var carbsMax = 1000.0
     private var sugarMax = 1000.0
@@ -104,9 +105,11 @@ class HomeActivity : AppCompatActivity() {
 
                             // --- PRICING & MACRO CALCULATION LOGIC ---
                             var pro = 0.0; var carb = 0.0; var sug = 0.0; var cal = 0.0
-                            var totalPrice = 0.0
+                            
+                            // Dashboard price display stays Standard regardless of budget setting.
+                            val totalPrice = PriceCalculator.calculateRecipePrice(r, businessInventory, 1)
+                            
                             var isMissing = false
-
                             r.ingredients?.forEach { (name, amt) ->
                                 val lib = ingredientLibrary[name]
                                 if (lib != null) {
@@ -114,23 +117,13 @@ class HomeActivity : AppCompatActivity() {
                                     val qty = PriceCalculator.extractNumericValue(amountStr)
                                     val factor = if (name.contains("Egg", true)) qty else (qty / 50.0)
 
-                                    // Macros
                                     pro += factor * toFilterDouble(lib.child("pro").value, 0.0)
                                     carb += factor * toFilterDouble(lib.child("carb").value, 0.0)
                                     sug += factor * toFilterDouble(lib.child("sugar").value, 0.0)
                                     cal += factor * toFilterDouble(lib.child("cal").value, 0.0)
-
-                                    // Pricing Logic: Use calculation logic from details page for consistency
-                                    val standardItem = PriceCalculator.findStandardMatch(name, businessInventory)
-
-                                    if (standardItem != null) {
-                                        val orderCount = PriceCalculator.calculateOrderCount(amountStr, standardItem.size, 1)
-                                        totalPrice += standardItem.price * orderCount
-                                    } else {
-                                        // Fallback to library standard price
+                                    
+                                    if (PriceCalculator.findStandardMatch(name, businessInventory) == null) {
                                         isMissing = true
-                                        val stdPrice = toFilterDouble(lib.child("price").value, 0.0)
-                                        totalPrice += (stdPrice * (qty / 100.0))
                                     }
                                 }
                             }
@@ -166,7 +159,6 @@ class HomeActivity : AppCompatActivity() {
             val s = r.calculatedMacros["Sugar"]?.toDouble() ?: 0.0
             val cal = r.calculatedMacros["Calories"]?.toDouble() ?: 0.0
 
-            // Removed budget filtering from Homepage as requested
             val matchesMacros = (p >= proteinMin && p <= proteinMax) && (c <= carbsMax) && (s <= sugarMax) && (cal <= caloriesMax)
             val matchesSearch = if (searchQuery.isEmpty()) true else r.title.contains(searchQuery, true)
             val matchesTime = if (isShortPrepActive) r.totalTime <= 20 else true
@@ -188,6 +180,7 @@ class HomeActivity : AppCompatActivity() {
                         userDiet = s.child("dietary_type").value?.toString() ?: "Standard"
                         budgetMin = toFilterDouble(s.child("budget_min").value, 0.0)
                         budgetMax = toFilterDouble(s.child("budget_max").value, 1000.0)
+                        isBudgetEnabled = s.child("is_budget_enabled").value as? Boolean ?: false
                         proteinMin = toFilterDouble(s.child("protein_min").value, 0.0)
                         proteinMax = toFilterDouble(s.child("protein_max").value, 1000.0)
                         carbsMax = toFilterDouble(s.child("carbs_max").value, 1000.0)
@@ -201,6 +194,9 @@ class HomeActivity : AppCompatActivity() {
                         if (algNode.child("Gluten").value == true) activeAllergens.add("Gluten")
                         if (algNode.child("Dairy").value == true) activeAllergens.add("Dairy")
                         customAllergen = algNode.child("Others_Value").value?.toString()?.lowercase() ?: ""
+                        
+                        // Pass budget settings to adapter for use in details but not for card price
+                        recipeAdapter.updateBudgetSettings(isBudgetEnabled, budgetMax)
                     }
                     loadRecipes()
                 }

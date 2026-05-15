@@ -29,6 +29,7 @@ class RecipeDetailsActivity : AppCompatActivity() {
     private val currentPantryItems = mutableListOf<PantryIngredient>()
     private var currentRecipe: Recipe? = null
     private var userMaxBudget: Double = 0.0
+    private var isBudgetEnabled: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,6 +73,7 @@ class RecipeDetailsActivity : AppCompatActivity() {
         database.child("Users").child(uid).child("Preferences").get().addOnSuccessListener { snapshot ->
             if (snapshot.exists()) {
                 userMaxBudget = snapshot.child("budget_max").value?.toString()?.toDoubleOrNull() ?: 1000.0
+                isBudgetEnabled = snapshot.child("is_budget_enabled").value as? Boolean ?: false
             }
             loadPantryAndBusinessData(recipe)
         }.addOnFailureListener {
@@ -159,14 +161,15 @@ class RecipeDetailsActivity : AppCompatActivity() {
 
         binding.llIngredientsList.removeAllViews()
         
-        // UNIT AWARE GREEDY OPTIMIZATION
         val pool = PriceCalculator.buildAvailablePool(currentPantryItems)
-        val (incrementalCost, fitsBudget, selections) = PriceCalculator.performGreedyOptimization(recipe, allStoreItems, multiplier, userMaxBudget, pool)
 
-        // Show Full Page Error if budget is too low
-        if (!fitsBudget && userMaxBudget > 0) {
+        // 1. BUDGET ERROR CHECK: Always uses Greedy Optimization if budget is enabled.
+        val effectiveBudget = if (isBudgetEnabled) userMaxBudget else 0.0
+        val (greedyCost, fitsBudget, _) = PriceCalculator.performGreedyOptimization(recipe, allStoreItems, multiplier, effectiveBudget, pool)
+
+        if (isBudgetEnabled && !fitsBudget) {
             binding.layoutBudgetError.visibility = View.VISIBLE
-            binding.tvBudgetMessage.text = "Your budget of ₱${String.format("%.2f", userMaxBudget)} is too low. Estimated incremental cost is ₱${String.format("%.2f", incrementalCost)} even with optimized alternatives."
+            binding.tvBudgetMessage.text = "Your budget of ₱${String.format("%.2f", userMaxBudget)} is too low. Estimated incremental cost is ₱${String.format("%.2f", greedyCost)} even with optimized alternatives."
             binding.recipeContentScroll.visibility = View.GONE
             binding.detailActionButtons.visibility = View.GONE
             binding.appBar.setExpanded(false, false)
@@ -177,11 +180,15 @@ class RecipeDetailsActivity : AppCompatActivity() {
             binding.detailActionButtons.visibility = View.VISIBLE
         }
 
+        // 2. UI DISPLAY: Always uses Standard Prices (Greedy OFF for Display)
+        // Pass 0.0 as budget to performGreedyOptimization to force it to use Standard choices.
+        val (standardIncrementalCost, _, standardSelections) = PriceCalculator.performGreedyOptimization(recipe, allStoreItems, multiplier, 0.0, pool)
+
         recipe.ingredients?.forEach { (name, rawAmount) ->
             val amountStr = rawAmount.toString()
             val scaledAmount = scaleAmount(amountStr, multiplier)
 
-            val selectedItem = selections[name]
+            val selectedItem = standardSelections[name]
 
             val priceText: String
             if (selectedItem != null) {
@@ -212,7 +219,8 @@ class RecipeDetailsActivity : AppCompatActivity() {
             binding.llIngredientsList.addView(tvName)
         }
 
-        binding.tvDetailPrice.text = "₱${String.format("%.2f", incrementalCost)}"
+        // The displayed incremental total is now based on Standard choices (with leftover awareness)
+        binding.tvDetailPrice.text = "₱${String.format("%.2f", standardIncrementalCost)}"
         
         binding.tvStepsList.text = recipe.steps?.mapIndexed { i, s -> "${i + 1}. $s" }?.joinToString("\n\n") ?: "No cooking steps provided."
     }
@@ -253,13 +261,15 @@ class RecipeDetailsActivity : AppCompatActivity() {
         val uid = auth.currentUser?.uid ?: return
         val multiplier = recipe.servings
         
+        // ADD TO PANTRY: Always uses Greedy Optimization if budget is enabled.
+        val effectiveBudget = if (isBudgetEnabled) userMaxBudget else 0.0
         val pool = PriceCalculator.buildAvailablePool(currentPantryItems)
-        val optimization = PriceCalculator.performGreedyOptimization(recipe, allStoreItems, multiplier, userMaxBudget, pool)
+        val optimization = PriceCalculator.performGreedyOptimization(recipe, allStoreItems, multiplier, effectiveBudget, pool)
         val incrementalCost = optimization.first
         val fitsBudget = optimization.second
         val selections = optimization.third
         
-        if (!fitsBudget && userMaxBudget > 0) {
+        if (isBudgetEnabled && !fitsBudget) {
             showBudgetLowError(incrementalCost)
             return
         }
@@ -294,7 +304,6 @@ class RecipeDetailsActivity : AppCompatActivity() {
                 runningPool[standardTag] = (availableNow + (extraPacksNeeded * unitSize)) - volumeNeededNow
             }
 
-            // ONLY ADD TO PANTRY IF WE ACTUALLY NEED TO BUY IT (extraPacksNeeded > 0)
             if (extraPacksNeeded > 0) {
                 val key = pantryRef.push().key ?: return@forEach
                 val pantryItem = mapOf(

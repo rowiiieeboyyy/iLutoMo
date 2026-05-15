@@ -40,6 +40,7 @@ class PantryActivity : AppCompatActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     
     private var userMaxBudget = 1000.0
+    private var isBudgetEnabled = false
 
     sealed class PantryListItem {
         data class Header(val title: String, val isOutOfBudget: Boolean = false) : PantryListItem()
@@ -78,6 +79,7 @@ class PantryActivity : AppCompatActivity() {
         val uid = auth.currentUser?.uid ?: return
         database.child("Users").child(uid).child("Preferences").get().addOnSuccessListener { s ->
             userMaxBudget = s.child("budget_max").value?.toString()?.toDoubleOrNull() ?: 1000.0
+            isBudgetEnabled = s.child("is_budget_enabled").value as? Boolean ?: false
             loadPantryIngredients()
         }.addOnFailureListener { loadPantryIngredients() }
     }
@@ -99,7 +101,7 @@ class PantryActivity : AppCompatActivity() {
                 
                 val listItems = mutableListOf<PantryListItem>()
                 for ((title, items) in groupedMap) {
-                    // Filter out "borrowed" or already fulfilled ingredients (count <= 0)
+                    // Filter out satisfied ingredients (count <= 0)
                     val displayItems = items.filter { it.count > 0 }
                     if (displayItems.isNotEmpty()) {
                         listItems.add(PantryListItem.Header(title, outOfBudgetRecipes.contains(title)))
@@ -116,6 +118,7 @@ class PantryActivity : AppCompatActivity() {
 
     private fun calculateOutOfBudgetRecipes(groupedMap: Map<String, List<PantryIngredient>>) {
         outOfBudgetRecipes.clear()
+        if (!isBudgetEnabled) return // Don't show budget errors if filter is off
         
         val tagToTotalVolumeNeeded = mutableMapOf<String, Double>()
         val tagToTotalCostPaid = mutableMapOf<String, Double>()
@@ -140,7 +143,6 @@ class PantryActivity : AppCompatActivity() {
                     recipeDistributedCost += myShare
                 }
             }
-            // Recipe is out of budget if its distributed cost exceeds the user's maximum budget
             if (recipeDistributedCost > userMaxBudget) {
                 outOfBudgetRecipes.add(title)
             }
@@ -214,7 +216,6 @@ class PantryActivity : AppCompatActivity() {
         val currentC = if (ing.count <= 0) 1 else ing.count
         val newC = currentC + change
         if (newC <= 0) {
-            // If count becomes 0, we can remove it as it's now "borrowed" or satisfied
             database.child("Users").child(uid).child("Pantry").child(ing.id).removeValue()
             return
         }

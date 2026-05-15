@@ -182,7 +182,8 @@ class ProfileActivity : AppCompatActivity() {
                 "Dairy" to binding.cbDairy.isChecked,
                 "Others" to binding.cbOthers.isChecked,
                 "Others_Value" to binding.etOtherAllergen.text.toString().trim()
-            )
+            ),
+            "is_budget_enabled" to binding.checkBudget.isChecked
         )
 
         // Numeric Constraints
@@ -251,6 +252,9 @@ class ProfileActivity : AppCompatActivity() {
                 restoreSingle(binding.rangeCarbs, binding.checkCarbs, binding.etCarbsInput, "carbs", 1000f)
                 restoreSingle(binding.rangeSugar, binding.checkSugar, binding.etSugarInput, "sugar", 1000f)
                 restoreSingle(binding.rangeCalories, binding.checkCalories, binding.etCaloriesInput, "calories", 10000f)
+
+                val isBudgetEnabled = snapshot.child("is_budget_enabled").value as? Boolean ?: false
+                binding.checkBudget.isChecked = isBudgetEnabled
 
                 val alg = snapshot.child("allergens")
                 binding.cbSoy.isChecked = alg.child("Soy").value == true

@@ -23,6 +23,9 @@ class RecipeAdapter(
     private val database = FirebaseDatabase.getInstance().reference
     private val savedRecipeIds = mutableSetOf<String>()
     private var inventoryItems = listOf<InventoryItem>()
+    
+    private var userMaxBudget = 1000.0
+    private var isBudgetEnabled = false
 
     init {
         fetchSavedRecipes()
@@ -30,6 +33,12 @@ class RecipeAdapter(
 
     fun updateInventory(newInventory: List<InventoryItem>) {
         this.inventoryItems = newInventory
+        notifyDataSetChanged()
+    }
+    
+    fun updateBudgetSettings(enabled: Boolean, max: Double) {
+        this.isBudgetEnabled = enabled
+        this.userMaxBudget = max
         notifyDataSetChanged()
     }
 
@@ -92,10 +101,11 @@ class RecipeAdapter(
             }
         }
 
-        // DISPLAY TOTAL ESTIMATED PRICE - Recalculated for accurate rounding
+        // DISPLAY TOTAL ESTIMATED PRICE - Always Standard as requested
         holder.tvPrice?.let {
             it.visibility = View.VISIBLE
             val total = if (inventoryItems.isNotEmpty()) {
+                // Greedy is only for null error/pantry. Dashboard display stays Standard.
                 PriceCalculator.calculateRecipePrice(recipe, inventoryItems, multiplier)
             } else {
                 recipe.calculatedPrice * multiplier
