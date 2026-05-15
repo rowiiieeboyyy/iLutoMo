@@ -193,6 +193,17 @@ object PriceCalculator {
         return ceil(totalNeeded / sizeValue).toInt().coerceAtLeast(1)
     }
 
+    fun stem(word: String): String {
+        val w = word.lowercase().trim()
+        return when {
+            w.endsWith("ies") && w.length > 3 -> w.removeSuffix("ies") + "y"
+            w.endsWith("es") && w.length > 3 -> w.removeSuffix("es")
+            w.endsWith("ed") && w.length > 3 -> w.removeSuffix("ed")
+            w.endsWith("s") && w.length > 2 && !w.endsWith("ss") -> w.removeSuffix("s")
+            else -> w
+        }
+    }
+
     fun findStandardMatch(ingredientName: String, inventory: List<InventoryItem>): InventoryItem? {
         return findMatchByGrade(ingredientName, inventory, listOf("Standard", "Budget", "Premium"))
     }
@@ -203,11 +214,11 @@ object PriceCalculator {
 
     private fun findMatchByGrade(ingredientName: String, inventory: List<InventoryItem>, preferredGrades: List<String>): InventoryItem? {
         val queryClean = ingredientName.lowercase().trim().replace(cleanRegex, " ")
-        val queryWords = queryClean.split(" ").map { it.removeSuffix("s") }.filter { it.isNotBlank() }
+        val rawQueryWords = queryClean.split(" ").filter { it.isNotBlank() }
+        val queryWords = rawQueryWords.map { stem(it) }.toSet()
 
         if (queryWords.isEmpty()) return null
 
-        // Cache pre-cleaned item strings would be better, but optimizing comparison for now
         val scoredItems = inventory.mapNotNull { item ->
             if (item.stock <= 0 || item.price <= 0) return@mapNotNull null
 
@@ -216,21 +227,99 @@ object PriceCalculator {
             val itemTag = item.ingredientTag.lowercase().replace(cleanRegex, " ")
 
             val combined = "$itemName $itemIng $itemTag"
+            val itemWords = combined.split(" ").filter { it.isNotBlank() }.map { stem(it) }.toSet()
 
-            var score = 0
+            // Strict intersection matching
+            val matches = queryWords.intersect(itemWords).size
+            if (matches == 0) return@mapNotNull null
+
+            var score = matches * 3000
+            
+            // 1. Exact phrase match (Highest priority)
             if (itemName.trim() == queryClean || itemIng.trim() == queryClean) {
-                score = 1000
-            } else {
-                val matchCount = queryWords.count { qWord -> combined.contains(qWord) }
-                if (matchCount == 0) return@mapNotNull null
-                score = matchCount
+                score += 50000
+            } else if (combined.contains(Regex("\\b${Regex.escape(queryClean)}\\b"))) {
+                score += 20000
+            }
+            
+            // 2. Bonus for matching all query words
+            if (matches >= queryWords.size) {
+                score += 10000
             }
 
+            // --- CRITICAL FIXES FOR MISMAPPED INGREDIENTS ---
+
+            // A. Chicken specificity: Chicken Strip vs generic Chicken meat vs Chicken Broth
+            val isChickenQuery = "chicken" in queryWords
+            val isStripQuery = "strip" in queryWords
+            val isLiquidItem = itemWords.intersect(setOf("broth", "stock", "cube", "bouillon", "season", "powder")).isNotEmpty()
+            
+            if (isChickenQuery) {
+                if (isStripQuery) {
+                    if ("strip" !in itemWords) score -= 60000 // strongly penalize non-strip items
+                    if (isLiquidItem) score -= 80000 // Disqualify broth
+                } else {
+                    // Generic chicken query should not favor broth or stock
+                    if (isLiquidItem && "broth" !in queryWords && "stock" !in queryWords) {
+                        score -= 40000
+                    }
+                }
+            }
+
+            // B. Rice Flour/Noodle vs Cooked Rice / Grain Rice
+            if ("rice" in queryWords) {
+                val isFlourQuery = "flour" in queryWords
+                val isNoodleQuery = "noodle" in queryWords || "vermicelli" in queryWords || "bihon" in queryWords || "pancit" in queryWords
+                
+                val isNoodleItem = itemWords.intersect(setOf("noodle", "vermicelli", "bihon", "pancit")).isNotEmpty()
+                val isFlourItem = "flour" in itemWords
+                val isCookedRiceItem = "cook" in itemWords || combined.contains("cooked")
+                
+                if (isFlourQuery) {
+                    if (!isFlourItem) score -= 60000 // "Rice" is not "Rice Flour"
+                    if (isCookedRiceItem) score -= 45000 // "Cooked Rice" is not "Rice Flour"
+                }
+                
+                if (isNoodleQuery) {
+                    if (!isNoodleItem) score -= 60000 // "Rice" is not "Rice Noodle"
+                    if (isCookedRiceItem) score -= 45000 // "Cooked Rice" is not "Rice Noodle"
+                }
+                
+                // Grain rice check
+                if (!isFlourQuery && !isNoodleQuery && !queryWords.contains("cook")) {
+                    if (isFlourItem || isNoodleItem || isCookedRiceItem) {
+                        score -= 30000
+                    }
+                }
+            }
+
+            // C. Eggs vs Eggplant
+            if ("egg" in queryWords && "eggplant" !in queryWords) {
+                if ("eggplant" in itemWords || combined.contains("eggplant")) {
+                    score -= 100000 // Hard block eggplant
+                }
+            }
+            
+            // D. Egg Yolk/White redirection to generic Eggs if specific yolk product not found
+            if ("egg" in queryWords && ("yolk" in queryWords || "white" in queryWords)) {
+                if ("egg" in itemWords && "eggplant" !in itemWords) {
+                    score += 15000 // Preference for generic Eggs fallback
+                }
+            }
+
+            // E. Meat cut isolation
+            val meatCutKeywords = setOf("breast", "thigh", "wing", "meat", "fillet", "ground", "mince", "drumstick", "leg", "steak", "rib", "loin", "chop", "strip")
+            if (queryWords.intersect(meatCutKeywords).isNotEmpty() && isLiquidItem) {
+                score -= 40000
+            }
+
+            if (score <= 0) return@mapNotNull null
             item to score
         }
 
         if (scoredItems.isEmpty()) return null
 
+        // Sort best matches by score then price
         val maxScore = scoredItems.maxOf { it.second }
         val bestMatches = scoredItems.filter { it.second == maxScore }.map { it.first }
 
@@ -384,5 +473,34 @@ object PriceCalculator {
             }
         }
         return total
+    }
+
+    fun isAvailableInPantry(ingredientName: String, amount: String, multiplier: Int, pantryItems: List<PantryIngredient>): Boolean {
+        val pool = buildAvailablePool(pantryItems)
+        val needed = extractNumericValue(amount) * multiplier
+        val qClean = ingredientName.lowercase().trim().replace(cleanRegex, " ")
+        val qWords = qClean.split(" ").filter { it.isNotBlank() }.map { stem(it) }.toSet()
+        
+        for ((tag, avail) in pool) {
+            val pWords = tag.lowercase().split(" ").filter { it.isNotBlank() }.map { stem(it) }.toSet()
+            val intersect = qWords.intersect(pWords)
+            
+            if (intersect.isNotEmpty()) {
+                var possibleMatch = true
+                
+                // Chicken specificity
+                if ("strip" in qWords && "strip" !in pWords && "chicken" in pWords) possibleMatch = false
+                
+                // Rice specificity
+                if ("flour" in qWords && "rice" in qWords && "flour" !in pWords) possibleMatch = false
+                if (("noodle" in qWords || "bihon" in qWords) && "rice" in qWords && ("noodle" !in pWords && "bihon" !in pWords)) possibleMatch = false
+                
+                // Egg vs Eggplant
+                if ("egg" in qWords && "eggplant" !in qWords && "eggplant" in pWords) possibleMatch = false
+                
+                if (possibleMatch && avail >= (needed - 0.001)) return true
+            }
+        }
+        return false
     }
 }

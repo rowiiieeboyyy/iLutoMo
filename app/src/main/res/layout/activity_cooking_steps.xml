@@ -42,16 +42,16 @@
         android:id="@+id/divider"
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="#888888"
+        android:background="#EEEEEE"
         app:layout_constraintTop_toBottomOf="@id/headerSteps" />
 
     <androidx.cardview.widget.CardView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_margin="16dp"
-        app:cardBackgroundColor="#D3D3D3"
-        app:cardCornerRadius="30dp"
-        app:cardElevation="0dp"
+        app:cardBackgroundColor="#F8F8F8"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="2dp"
         app:layout_constraintTop_toBottomOf="@id/divider"
         app:layout_constraintBottom_toTopOf="@id/bottomNav">
 
@@ -63,26 +63,56 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="24dp">
+                android:padding="20dp">
 
                 <TextView
                     android:id="@+id/tvRecipeTitle"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="Selected Recipe"
                     android:textColor="#1B3022"
-                    android:textSize="20sp"
+                    android:textSize="22sp"
                     android:textStyle="bold"
-                    android:layout_marginBottom="16dp" />
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Ingredients Checklist"
+                    android:textColor="#2D5A27"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <LinearLayout
+                    android:id="@+id/llStepsIngredients"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginBottom="24dp" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="#DDDDDD"
+                    android:layout_marginBottom="20dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Preparation Steps"
+                    android:textColor="#2D5A27"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
 
                 <TextView
                     android:id="@+id/tvRecipeSteps"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textColor="#1B3022"
-                    android:textSize="17sp"
-                    android:textStyle="bold"
-                    android:lineSpacingExtra="6dp"
+                    android:textColor="#333333"
+                    android:textSize="16sp"
+                    android:lineSpacingExtra="8dp"
                     android:text="No steps provided." />
             </LinearLayout>
         </ScrollView>
