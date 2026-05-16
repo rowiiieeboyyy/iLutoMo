@@ -204,6 +204,11 @@ object PriceCalculator {
         }
     }
 
+    fun getWords(text: String): Set<String> {
+        return text.lowercase().trim().replace(cleanRegex, " ")
+            .split(" ").filter { it.isNotBlank() }.map { stem(it) }.toSet()
+    }
+
     fun findStandardMatch(ingredientName: String, inventory: List<InventoryItem>): InventoryItem? {
         return findMatchByGrade(ingredientName, inventory, listOf("Standard", "Budget", "Premium"))
     }
@@ -214,8 +219,7 @@ object PriceCalculator {
 
     private fun findMatchByGrade(ingredientName: String, inventory: List<InventoryItem>, preferredGrades: List<String>): InventoryItem? {
         val queryClean = ingredientName.lowercase().trim().replace(cleanRegex, " ")
-        val rawQueryWords = queryClean.split(" ").filter { it.isNotBlank() }
-        val queryWords = rawQueryWords.map { stem(it) }.toSet()
+        val queryWords = getWords(ingredientName)
 
         if (queryWords.isEmpty()) return null
 
@@ -227,90 +231,69 @@ object PriceCalculator {
             val itemTag = item.ingredientTag.lowercase().replace(cleanRegex, " ")
 
             val combined = "$itemName $itemIng $itemTag"
-            val itemWords = combined.split(" ").filter { it.isNotBlank() }.map { stem(it) }.toSet()
+            val itemWords = getWords(combined)
 
-            // Strict intersection matching
+            // --- CRITICAL SPECIFICITY & EXCLUSION LOGIC ---
+
+            // 1. Mandatory Keyword Enforcement
+            val mandatoryKeywords = setOf("peanut", "eggplant", "strip", "flour", "noodle", "vermicelli", "bihon", "yolk", "white")
+            for (m in mandatoryKeywords) {
+                if (m in queryWords && m !in itemWords) {
+                    // Exception: yolk/white can redirect to generic Eggs if specific product not found
+                    if ((m == "yolk" || m == "white") && "egg" in itemWords && "eggplant" !in itemWords) continue
+                    return@mapNotNull null
+                }
+            }
+
+            // 2. Strict Exclusion Enforcement
+            // Peanut Butter query must not match Butter
+            if ("peanut" in queryWords && "peanut" !in itemWords) return@mapNotNull null
+            // Butter query must not match Peanut Butter
+            if ("butter" in queryWords && "peanut" !in queryWords && "peanut" in itemWords) return@mapNotNull null
+            
+            // Egg query must not match Eggplant
+            if ("egg" in queryWords && "eggplant" !in queryWords && "eggplant" in itemWords) return@mapNotNull null
+            // Eggplant query must not match generic Egg
+            if ("eggplant" in queryWords && "eggplant" !in itemWords) return@mapNotNull null
+
+            // 3. Rice Product Isolation (Rice Flour / Noodle vs Cooked Rice)
+            if ("rice" in queryWords) {
+                if ("flour" in queryWords && "flour" !in itemWords) return@mapNotNull null
+                if ("noodle" in queryWords && "noodle" !in itemWords) return@mapNotNull null
+                if ("cook" in itemWords && "cook" !in queryWords) return@mapNotNull null
+            }
+
+            // 4. Meat Cut vs Liquid Isolation
+            val meatCuts = setOf("strip", "breast", "thigh", "wing", "fillet", "ground", "mince")
+            val liquids = setOf("broth", "stock", "cube", "bouillon")
+            val isMeatQuery = queryWords.any { it in meatCuts } || (queryWords.contains("chicken") && !queryWords.contains("broth") && !queryWords.contains("stock"))
+            val isLiquidItem = itemWords.any { it in liquids }
+            if (isMeatQuery && isLiquidItem) return@mapNotNull null
+
+            // --- SCORING ---
+
             val matches = queryWords.intersect(itemWords).size
             if (matches == 0) return@mapNotNull null
 
-            var score = matches * 3000
+            var score = matches * 5000
             
-            // 1. Exact phrase match (Highest priority)
+            // Exact phrase match (Top priority)
             if (itemName.trim() == queryClean || itemIng.trim() == queryClean) {
                 score += 50000
             } else if (combined.contains(Regex("\\b${Regex.escape(queryClean)}\\b"))) {
                 score += 20000
             }
             
-            // 2. Bonus for matching all query words
+            // Bonus for matching all query words
             if (matches >= queryWords.size) {
                 score += 10000
             }
 
-            // --- CRITICAL FIXES FOR MISMAPPED INGREDIENTS ---
-
-            // A. Chicken specificity: Chicken Strip vs generic Chicken meat vs Chicken Broth
-            val isChickenQuery = "chicken" in queryWords
-            val isStripQuery = "strip" in queryWords
-            val isLiquidItem = itemWords.intersect(setOf("broth", "stock", "cube", "bouillon", "season", "powder")).isNotEmpty()
-            
-            if (isChickenQuery) {
-                if (isStripQuery) {
-                    if ("strip" !in itemWords) score -= 60000 // strongly penalize non-strip items
-                    if (isLiquidItem) score -= 80000 // Disqualify broth
-                } else {
-                    // Generic chicken query should not favor broth or stock
-                    if (isLiquidItem && "broth" !in queryWords && "stock" !in queryWords) {
-                        score -= 40000
-                    }
-                }
-            }
-
-            // B. Rice Flour/Noodle vs Cooked Rice / Grain Rice
-            if ("rice" in queryWords) {
-                val isFlourQuery = "flour" in queryWords
-                val isNoodleQuery = "noodle" in queryWords || "vermicelli" in queryWords || "bihon" in queryWords || "pancit" in queryWords
-                
-                val isNoodleItem = itemWords.intersect(setOf("noodle", "vermicelli", "bihon", "pancit")).isNotEmpty()
-                val isFlourItem = "flour" in itemWords
-                val isCookedRiceItem = "cook" in itemWords || combined.contains("cooked")
-                
-                if (isFlourQuery) {
-                    if (!isFlourItem) score -= 60000 // "Rice" is not "Rice Flour"
-                    if (isCookedRiceItem) score -= 45000 // "Cooked Rice" is not "Rice Flour"
-                }
-                
-                if (isNoodleQuery) {
-                    if (!isNoodleItem) score -= 60000 // "Rice" is not "Rice Noodle"
-                    if (isCookedRiceItem) score -= 45000 // "Cooked Rice" is not "Rice Noodle"
-                }
-                
-                // Grain rice check
-                if (!isFlourQuery && !isNoodleQuery && !queryWords.contains("cook")) {
-                    if (isFlourItem || isNoodleItem || isCookedRiceItem) {
-                        score -= 30000
-                    }
-                }
-            }
-
-            // C. Eggs vs Eggplant
-            if ("egg" in queryWords && "eggplant" !in queryWords) {
-                if ("eggplant" in itemWords || combined.contains("eggplant")) {
-                    score -= 100000 // Hard block eggplant
-                }
-            }
-            
-            // D. Egg Yolk/White redirection to generic Eggs if specific yolk product not found
+            // Redirection boost for generic eggs if specific yolk/white requested
             if ("egg" in queryWords && ("yolk" in queryWords || "white" in queryWords)) {
-                if ("egg" in itemWords && "eggplant" !in itemWords) {
-                    score += 15000 // Preference for generic Eggs fallback
+                if ("egg" in itemWords && "eggplant" !in itemWords && itemWords.size <= 2) {
+                    score += 5000 
                 }
-            }
-
-            // E. Meat cut isolation
-            val meatCutKeywords = setOf("breast", "thigh", "wing", "meat", "fillet", "ground", "mince", "drumstick", "leg", "steak", "rib", "loin", "chop", "strip")
-            if (queryWords.intersect(meatCutKeywords).isNotEmpty() && isLiquidItem) {
-                score -= 40000
             }
 
             if (score <= 0) return@mapNotNull null
@@ -319,7 +302,6 @@ object PriceCalculator {
 
         if (scoredItems.isEmpty()) return null
 
-        // Sort best matches by score then price
         val maxScore = scoredItems.maxOf { it.second }
         val bestMatches = scoredItems.filter { it.second == maxScore }.map { it.first }
 
@@ -478,25 +460,32 @@ object PriceCalculator {
     fun isAvailableInPantry(ingredientName: String, amount: String, multiplier: Int, pantryItems: List<PantryIngredient>): Boolean {
         val pool = buildAvailablePool(pantryItems)
         val needed = extractNumericValue(amount) * multiplier
-        val qClean = ingredientName.lowercase().trim().replace(cleanRegex, " ")
-        val qWords = qClean.split(" ").filter { it.isNotBlank() }.map { stem(it) }.toSet()
+        val qWords = getWords(ingredientName)
         
         for ((tag, avail) in pool) {
-            val pWords = tag.lowercase().split(" ").filter { it.isNotBlank() }.map { stem(it) }.toSet()
-            val intersect = qWords.intersect(pWords)
+            val pWords = getWords(tag)
             
+            // Strict exclusionary matches for Pantry Check
+            
+            // Peanut Butter vs Butter
+            if ("peanut" in qWords && "peanut" !in pWords) continue 
+            if ("peanut" !in qWords && "butter" in qWords && "peanut" in pWords) continue
+            
+            // Egg vs Eggplant
+            if ("egg" in qWords && "eggplant" !in qWords && "eggplant" in pWords) continue
+            if ("eggplant" in qWords && "eggplant" !in pWords) continue
+
+            // Rice product isolation
+            if ("rice" in qWords) {
+                if ("flour" in qWords && "flour" !in pWords) continue
+                if ("noodle" in qWords && "noodle" !in pWords) continue
+                if ("cook" in pWords && "cook" !in qWords) continue
+            }
+
+            val intersect = qWords.intersect(pWords)
             if (intersect.isNotEmpty()) {
                 var possibleMatch = true
-                
-                // Chicken specificity
-                if ("strip" in qWords && "strip" !in pWords && "chicken" in pWords) possibleMatch = false
-                
-                // Rice specificity
-                if ("flour" in qWords && "rice" in qWords && "flour" !in pWords) possibleMatch = false
-                if (("noodle" in qWords || "bihon" in qWords) && "rice" in qWords && ("noodle" !in pWords && "bihon" !in pWords)) possibleMatch = false
-                
-                // Egg vs Eggplant
-                if ("egg" in qWords && "eggplant" !in qWords && "eggplant" in pWords) possibleMatch = false
+                if ("strip" in qWords && "strip" !in pWords) possibleMatch = false
                 
                 if (possibleMatch && avail >= (needed - 0.001)) return true
             }
